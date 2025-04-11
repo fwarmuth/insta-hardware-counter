@@ -30,6 +30,10 @@
 #define PANE_HEIGHT PANEL_HEIGHT
 #define NUM_LEDS (PANE_WIDTH * PANE_HEIGHT)
 
+// WiFi status indicator colors
+#define WIFI_CONNECTED_COLOR 0x07E0    // Green in RGB565
+#define WIFI_DISCONNECTED_COLOR 0xF800  // Red in RGB565
+
 // Function declarations
 /**
  * @brief Initialize the LED matrix
@@ -79,6 +83,12 @@ void displayBitmap(const uint8_t* bitmap, uint16_t width, uint16_t height,
  * @return True if successful, false if failed
  */
 bool displayJPEG(const char* filename, uint16_t x, uint16_t y, uint16_t maxWidth=0, uint16_t maxHeight=0, bool centerPos=false);
+
+/**
+ * @brief Update the WiFi status indicator in the bottom left pixel
+ * @param connected True if WiFi is connected, false otherwise
+ */
+void updateWiFiStatusIndicator(bool connected);
 
 extern MatrixPanel_I2S_DMA *matrix;
 

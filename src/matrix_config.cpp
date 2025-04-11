@@ -6,6 +6,18 @@
 MatrixPanel_I2S_DMA *matrix = nullptr;
 
 /**
+ * @brief Update the WiFi status indicator in the bottom left pixel
+ * @param connected True if WiFi is connected, false otherwise
+ */
+void updateWiFiStatusIndicator(bool connected) {
+    if (matrix != nullptr) {
+        // Draw a single pixel at bottom left corner (0, PANEL_HEIGHT-1)
+        uint16_t color = connected ? WIFI_CONNECTED_COLOR : WIFI_DISCONNECTED_COLOR;
+        matrix->drawPixel(0, PANEL_HEIGHT-1, color);
+    }
+}
+
+/**
  * @brief Initialize the LED matrix with the configured settings
  * @return Pointer to the initialized matrix
  */
@@ -25,6 +37,9 @@ MatrixPanel_I2S_DMA* initMatrix() {
     matrix = new MatrixPanel_I2S_DMA(mxconfig);
     matrix->begin();
     matrix->setBrightness8(255);
+    
+    // Initialize WiFi status indicator as disconnected by default
+    updateWiFiStatusIndicator(false);
     
     return matrix;
 }
