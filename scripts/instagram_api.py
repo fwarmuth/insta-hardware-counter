@@ -44,6 +44,10 @@ def get_latest_data(username: str = DEFAULT_USERNAME) -> Dict[str, Any]:
     db_path = os.path.join(parent_dir, 'data', 'instagram_metrics.db')
     db = InstagramDatabase(db_path)
     
+    # Get login credentials from environment variables
+    login_username = os.environ.get('INSTAGRAM_USERNAME')
+    login_password = os.environ.get('INSTAGRAM_PASSWORD')
+    
     try:
         # Get the latest record from the database
         latest_metrics = db.get_latest_metrics(username)
@@ -72,7 +76,13 @@ def get_latest_data(username: str = DEFAULT_USERNAME) -> Dict[str, Any]:
         # Refresh the data if needed
         if needs_refresh:
             logger.info(f"Refreshing Instagram metrics for {username}...")
-            metrics, record_id = get_instagram_metrics(username, store_in_db=True, db_path=db_path)
+            metrics, record_id = get_instagram_metrics(
+                username, 
+                store_in_db=True, 
+                db_path=db_path,
+                login_username=login_username,
+                login_password=login_password
+            )
             
             if metrics:
                 followers_count = metrics.get('followers')
@@ -133,6 +143,23 @@ if __name__ == '__main__':
     # Check if Instagram credentials are provided
     instagram_username = os.environ.get('INSTAGRAM_USERNAME')
     instagram_password = os.environ.get('INSTAGRAM_PASSWORD')
+    
+    # Print environment variables for debugging
+    logger.info("Environment Variables:")
+    logger.info(f"HOST: {os.environ.get('HOST', 'Not set')}")
+    logger.info(f"PORT: {os.environ.get('PORT', 'Not set')}")
+    logger.info(f"INSTAGRAM_USERNAME: {instagram_username if instagram_username else 'Not set'}")
+    logger.info(f"INSTAGRAM_PASSWORD: {'*****' if instagram_password else 'Not set'}")
+    
+    # Print all environment variables for debugging
+    logger.info("All Environment Variables:")
+    for key, value in os.environ.items():
+        # Mask sensitive values
+        if 'password' in key.lower() or 'secret' in key.lower() or 'key' in key.lower():
+            logger.info(f"{key}: *****")
+        else:
+            logger.info(f"{key}: {value}")
+    
     if not instagram_username or not instagram_password:
         logger.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data.")
         logger.warning("Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
