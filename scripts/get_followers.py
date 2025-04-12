@@ -1,309 +1,47 @@
-#!/usr/bin/env python3
-import re
-import sys
+import instaloader
+import logging
 import time
-import os
-import datetime
-from pathlib import Path
+from typing import Optional
 
-# Add the script directory to Python path to import the database module
-script_dir = Path(__file__).resolve().parent
-sys.path.append(str(script_dir))
-
-# Import the database module
-try:
-    from db.instagram_db import InstagramDatabase
-except ImportError:
-    print("Error: Could not import database module.")
-    print("Make sure the db/instagram_db.py file exists.")
-
-try:
-    import instaloader
-except ImportError:
-    print("Error: instaloader library not found.")
-    print("Please install it using: pip install instaloader")
-    sys.exit(1)
-
-def parse_number(number_str):
+def get_follower_count(username: str, retries: int = 3, retry_delay: int = 5) -> Optional[int]:
     """
-    Convert a number string with optional shorthand (k, m) into an integer.
-    Example: '1,234' -> 1234, '1.2m' -> 1200000, '3.4k' -> 3400.
-    """
-    number_str = number_str.lower().replace(',', '').strip()
-    if 'm' in number_str:
-        try:
-            return int(float(number_str.replace('m', '')) * 1_000_000)
-        except ValueError:
-            pass
-    elif 'k' in number_str:
-        try:
-            return int(float(number_str.replace('k', '')) * 1_000)
-        except ValueError:
-            pass
-    else:
-        try:
-            return int(number_str)
-        except ValueError:
-            pass
-    raise ValueError(f"Could not parse number from string: {number_str}")
-
-def get_instagram_followers_api(username, access_token, instagram_business_id):
-    """
-    Get Instagram follower count and post metrics using the Instagram Graph API.
-    This method requires a Facebook Business account with the Instagram account connected.
+    Retrieves the follower count for a given Instagram username.
     
     Args:
-        username (str): Instagram username (for reference only, not used in API call)
-        access_token (str): Valid access token for the Instagram Graph API
-        instagram_business_id (str): Instagram Business Account ID
+        username: The Instagram username to check
+        retries: Number of retry attempts if connection fails
+        retry_delay: Delay between retries in seconds
         
     Returns:
-        tuple: (followers_count, posts_count, recent_posts_count)
-            - followers_count: The exact number of followers
-            - posts_count: The total number of media/posts
-            - recent_posts_count: Number of posts in the last 7 days
+        int: Number of followers if successful
+        None: If retrieval fails after all retries
     """
-    import requests
-    import json
-    from datetime import datetime, timedelta
-    
-    # Base URL for the Graph API
-    base_url = "https://graph.facebook.com/v19.0/"
-    
-    try:
-        # Get account info including follower count
-        account_url = f"{base_url}{instagram_business_id}"
-        params = {
-            "fields": "followers_count,media_count,username",
-            "access_token": access_token
-        }
-        
-        response = requests.get(account_url, params=params)
-        response.raise_for_status()  # Raise exception for HTTP errors
-        
-        data = response.json()
-        
-        # Extract follower count and total media count
-        followers_count = data.get("followers_count")
-        posts_count = data.get("media_count")
-        
-        # Get media from the last 7 days to count recent posts
-        seven_days_ago = datetime.now() - timedelta(days=7)
-        timestamp = int(seven_days_ago.timestamp())
-        
-        # Request media with timestamp info
-        media_url = f"{base_url}{instagram_business_id}/media"
-        media_params = {
-            "fields": "timestamp",
-            "access_token": access_token,
-            "limit": 100  # Adjust this value based on expected recent post volume
-        }
-        
-        media_response = requests.get(media_url, params=media_params)
-        media_response.raise_for_status()
-        
-        media_data = media_response.json()
-        
-        # Count posts from the last 7 days
-        recent_posts_count = 0
-        
-        if "data" in media_data:
-            for post in media_data["data"]:
-                post_timestamp = datetime.strptime(post["timestamp"], "%Y-%m-%dT%H:%M:%S%z")
-                if post_timestamp.timestamp() > timestamp:
-                    recent_posts_count += 1
-                    
-            # Check if there are more pages of data
-            while "paging" in media_data and "next" in media_data["paging"] and recent_posts_count < posts_count:
-                next_url = media_data["paging"]["next"]
-                media_response = requests.get(next_url)
-                media_response.raise_for_status()
-                media_data = media_response.json()
-                
-                if "data" in media_data:
-                    for post in media_data["data"]:
-                        post_timestamp = datetime.strptime(post["timestamp"], "%Y-%m-%dT%H:%M:%S%z")
-                        if post_timestamp.timestamp() > timestamp:
-                            recent_posts_count += 1
-                        else:
-                            # Once we find posts older than 7 days, we can stop
-                            break
-                else:
-                    break
-        
-        return followers_count, posts_count, recent_posts_count
-        
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"API request error: {str(e)}")
-    except json.JSONDecodeError:
-        raise Exception("Error parsing API response")
-    except Exception as e:
-        raise Exception(f"Error accessing Instagram API: {str(e)}")
-
-def get_instagram_followers(username):
-    """
-    Get the exact follower count, total post count, and recent posts
-    for an Instagram profile using instaloader.
-    
-    Args:
-        username (str): Instagram username without the @ symbol
-        
-    Returns:
-        tuple: (followers_count, posts_count, recent_posts_count)
-            - followers_count: The exact number of followers
-            - posts_count: The total number of posts
-            - recent_posts_count: Number of posts in the last 7 days
-    """
-    # Create an instance of Instaloader
     loader = instaloader.Instaloader()
     
-    try:
-        # Get profile information
-        profile = instaloader.Profile.from_username(loader.context, username)
-        
-        # Get total posts count
-        posts_count = profile.mediacount
-        
-        # Count posts from the last 7 days
-        recent_posts_count = 0
-        current_time = time.time()
-        seven_days_ago = current_time - (7 * 24 * 60 * 60)  # 7 days in seconds
-        
-        # Iterate through the most recent posts and count those from the last 7 days
-        for post in profile.get_posts():
-            if post.date_utc.timestamp() > seven_days_ago:
-                recent_posts_count += 1
-            else:
-                # Stop once we reach posts older than 7 days
-                break
-        
-        # Return the follower count, total posts count, and recent posts count
-        return profile.followers, posts_count, recent_posts_count
-        
-    except instaloader.exceptions.ProfileNotExistsException:
-        raise Exception(f"Profile '{username}' does not exist")
-    except instaloader.exceptions.ConnectionException:
-        raise Exception("Connection error. Instagram may be rate-limiting your requests")
-    except Exception as e:
-        raise Exception(f"Error accessing Instagram profile: {str(e)}")
-
-def get_instagram_followers_fallback(url):
-    """
-    Fallback method using requests and BeautifulSoup.
-    This method extracts follower count and post count from the Instagram profile.
-    
-    Returns:
-        tuple: (followers_count, posts_count, None)
-            - followers_count: The approximate number of followers
-            - posts_count: The approximate number of posts
-            - None for recent posts (not available in fallback method)
-    """
-    import requests
-    from bs4 import BeautifulSoup
-    
-    # Use a browser-like User-Agent to reduce the risk of blocking.
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/58.0.3029.110 Safari/537.3"
-        )
-    }
-    
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Failed to load page, status code: {response.status_code}")
-    
-    # Use BeautifulSoup to parse the HTML.
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Find the meta tag with property "og:description".
-    meta_tag = soup.find('meta', property='og:description')
-    if not meta_tag:
-        raise Exception("Could not find the meta tag with property 'og:description'. The page structure may have changed.")
-    
-    content = meta_tag.get('content', '')
-    if not content:
-        raise Exception("The meta tag did not contain any content.")
-    
-    # The content is expected to be in the format:
-    # "1,234 Followers, 567 Following, 89 Posts - See more"
-    
-    # Extract follower count
-    follower_match = re.search(r'([\d.,]+[kKmM]?)\s+Followers', content)
-    if not follower_match:
-        raise Exception("Could not parse follower count from the meta tag content.")
-    
-    follower_count_str = follower_match.group(1)
-    follower_count = parse_number(follower_count_str)
-    
-    # Extract post count
-    post_match = re.search(r'([\d.,]+[kKmM]?)\s+Posts', content)
-    if not post_match:
-        # If posts can't be extracted, return None for posts
-        return follower_count, None, None
-    
-    post_count_str = post_match.group(1)
-    post_count = parse_number(post_count_str)
-    
-    # Fallback method can't determine recent posts, so return None for that value
-    return follower_count, post_count, None
-
-if __name__ == '__main__':
-    url = 'https://www.instagram.com/mein.kreis.pinneberg/'
-    username = 'mein.kreis.pinneberg'  # Extract username from the URL
-    
-    # Initialize database connection
-    db = InstagramDatabase()
-    current_timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # result = get_instagram_followers_api(username, 'your_access_token', 'your_instagram_business_id')
-    
-    try:
-        # Try the more accurate method first
-        print("Attempting to get exact follower count using instaloader...")
-        followers, posts, recent_posts = get_instagram_followers(username)
-        print("Exact follower count:", followers)
-        print("Total posts count:", posts)
-        print("Recent posts count (last 7 days):", recent_posts)
-        
-        # Store data in database with high resolution timestamp
-        record_id = db.store_metrics(username, followers, posts, recent_posts, current_timestamp)
-        print(f"Data stored in database with ID: {record_id}")
-        
-    except Exception as insta_error:
-        print(f"Error with instaloader method: {insta_error}")
-        print("Falling back to web scraping method...")
+    for attempt in range(retries):
         try:
-            # Fall back to the original method if the first one fails
-            followers, posts, recent_posts = get_instagram_followers_fallback(url)
-            print("Approximate follower count:", followers)
-            print("Approximate posts count:", posts)
-            print("Note: These counts may be rounded. For exact counts, try resolving the instaloader issues.")
-            
-            # Store data in database with high resolution timestamp
-            record_id = db.store_metrics(username, followers, posts, recent_posts, current_timestamp)
-            print(f"Data stored in database with ID: {record_id}")
-            
-        except Exception as error:
-            print("Error with fallback method:", error)
+            profile = instaloader.Profile.from_username(loader.context, username)
+            return profile.followers
+        except instaloader.exceptions.ConnectionException:
+            logging.warning(f"Connection error on attempt {attempt+1}/{retries}. Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+        except instaloader.exceptions.ProfileNotExistsException:
+            logging.error(f"Profile '{username}' does not exist.")
+            return None
+        except Exception as e:
+            logging.error(f"Error retrieving follower count: {str(e)}")
+            return None
     
-    # Display historical data if available
-    try:
-        print("\nHistorical Data (Last 5 records):")
-        historical_data = db.get_historical_data(username, 5)
-        if historical_data:
-            print("Timestamp\t\t\tFollowers\tPosts\tRecent Posts")
-            print("-" * 70)
-            for record in historical_data:
-                followers, posts, recent, timestamp = record
-                recent_str = str(recent) if recent is not None else "N/A"
-                print(f"{timestamp}\t{followers}\t\t{posts}\t{recent_str}")
-        else:
-            print("No historical data available yet.")
-    except Exception as db_error:
-        print(f"Error retrieving historical data: {db_error}")
+    logging.error(f"Failed to retrieve follower count after {retries} attempts.")
+    return None
+
+# Example usage
+if __name__ == "__main__":
+    username = "mein.kreis.pinneberg"
+    followers = get_follower_count(username)
     
-    # Close the database connection
-    db.close()
+    if followers is not None:
+        print(f"Followers for {username}: {followers}")
+    else:
+        print(f"Could not retrieve follower count for {username}")
 
