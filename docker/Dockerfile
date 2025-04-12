@@ -12,6 +12,9 @@ COPY scripts/ /app/scripts/
 # Set the environment variables
 ENV PORT=5000
 ENV HOST=0.0.0.0
+ENV INSTAGRAM_TARGET_ACCOUNT=""
+ENV INSTAGRAM_USERNAME=""
+ENV INSTAGRAM_PASSWORD=""
 
 # Expose the API port
 EXPOSE 5000

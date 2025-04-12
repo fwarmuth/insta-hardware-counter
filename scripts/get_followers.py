@@ -65,6 +65,8 @@ def get_instagram_metrics(
         except Exception as e:
             logging.error(f"Login failed: {str(e)}")
             return None, None
+    else:
+        logging.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data. Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
     
     for attempt in range(retries):
         try:

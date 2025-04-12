@@ -130,5 +130,12 @@ if __name__ == '__main__':
     # By default, only accessible from localhost. Set host to '0.0.0.0' to make it accessible externally
     host = os.environ.get('HOST', '127.0.0.1')
     
+    # Check if Instagram credentials are provided
+    instagram_username = os.environ.get('INSTAGRAM_USERNAME')
+    instagram_password = os.environ.get('INSTAGRAM_PASSWORD')
+    if not instagram_username or not instagram_password:
+        logger.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data.")
+        logger.warning("Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
+    
     logger.info(f"Starting Instagram metrics API server on {host}:{port}")
     app.run(host=host, port=port, debug=False)
