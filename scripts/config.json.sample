@@ -1,0 +1,5 @@
+{
+    "access_token": "YOUR_LONG_LIVED_ACCESS_TOKEN",
+    "instagram_business_id": "YOUR_INSTAGRAM_BUSINESS_ID",
+    "page_id": "YOUR_FACEBOOK_PAGE_ID"
+}

@@ -47,6 +47,99 @@ def parse_number(number_str):
             pass
     raise ValueError(f"Could not parse number from string: {number_str}")
 
+def get_instagram_followers_api(username, access_token, instagram_business_id):
+    """
+    Get Instagram follower count and post metrics using the Instagram Graph API.
+    This method requires a Facebook Business account with the Instagram account connected.
+    
+    Args:
+        username (str): Instagram username (for reference only, not used in API call)
+        access_token (str): Valid access token for the Instagram Graph API
+        instagram_business_id (str): Instagram Business Account ID
+        
+    Returns:
+        tuple: (followers_count, posts_count, recent_posts_count)
+            - followers_count: The exact number of followers
+            - posts_count: The total number of media/posts
+            - recent_posts_count: Number of posts in the last 7 days
+    """
+    import requests
+    import json
+    from datetime import datetime, timedelta
+    
+    # Base URL for the Graph API
+    base_url = "https://graph.facebook.com/v19.0/"
+    
+    try:
+        # Get account info including follower count
+        account_url = f"{base_url}{instagram_business_id}"
+        params = {
+            "fields": "followers_count,media_count,username",
+            "access_token": access_token
+        }
+        
+        response = requests.get(account_url, params=params)
+        response.raise_for_status()  # Raise exception for HTTP errors
+        
+        data = response.json()
+        
+        # Extract follower count and total media count
+        followers_count = data.get("followers_count")
+        posts_count = data.get("media_count")
+        
+        # Get media from the last 7 days to count recent posts
+        seven_days_ago = datetime.now() - timedelta(days=7)
+        timestamp = int(seven_days_ago.timestamp())
+        
+        # Request media with timestamp info
+        media_url = f"{base_url}{instagram_business_id}/media"
+        media_params = {
+            "fields": "timestamp",
+            "access_token": access_token,
+            "limit": 100  # Adjust this value based on expected recent post volume
+        }
+        
+        media_response = requests.get(media_url, params=media_params)
+        media_response.raise_for_status()
+        
+        media_data = media_response.json()
+        
+        # Count posts from the last 7 days
+        recent_posts_count = 0
+        
+        if "data" in media_data:
+            for post in media_data["data"]:
+                post_timestamp = datetime.strptime(post["timestamp"], "%Y-%m-%dT%H:%M:%S%z")
+                if post_timestamp.timestamp() > timestamp:
+                    recent_posts_count += 1
+                    
+            # Check if there are more pages of data
+            while "paging" in media_data and "next" in media_data["paging"] and recent_posts_count < posts_count:
+                next_url = media_data["paging"]["next"]
+                media_response = requests.get(next_url)
+                media_response.raise_for_status()
+                media_data = media_response.json()
+                
+                if "data" in media_data:
+                    for post in media_data["data"]:
+                        post_timestamp = datetime.strptime(post["timestamp"], "%Y-%m-%dT%H:%M:%S%z")
+                        if post_timestamp.timestamp() > timestamp:
+                            recent_posts_count += 1
+                        else:
+                            # Once we find posts older than 7 days, we can stop
+                            break
+                else:
+                    break
+        
+        return followers_count, posts_count, recent_posts_count
+        
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"API request error: {str(e)}")
+    except json.JSONDecodeError:
+        raise Exception("Error parsing API response")
+    except Exception as e:
+        raise Exception(f"Error accessing Instagram API: {str(e)}")
+
 def get_instagram_followers(username):
     """
     Get the exact follower count, total post count, and recent posts
@@ -163,6 +256,8 @@ if __name__ == '__main__':
     # Initialize database connection
     db = InstagramDatabase()
     current_timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # result = get_instagram_followers_api(username, 'your_access_token', 'your_instagram_business_id')
     
     try:
         # Try the more accurate method first
