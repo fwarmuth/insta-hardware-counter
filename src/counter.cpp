@@ -1,10 +1,15 @@
 #include "counter.h"
 #include "matrix_config.h"
 #include "color_utils.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 // Private counter variables
 static unsigned long counter = 0;
 static unsigned long lastCounterUpdate = 0;
+static const char* API_ENDPOINT = "http://edge.warmuth.xyz:5000/api/instagram/metrics";
+// static const char* API_ENDPOINT = "http://intagram-api.dmz:5000/api/instagram/metrics";
 
 /**
  * @brief Initialize the counter
@@ -12,7 +17,130 @@ static unsigned long lastCounterUpdate = 0;
 void initCounter() {
     counter = 0;
     lastCounterUpdate = millis();
+    // Try to get initial value from API
+    if(WiFi.status() == WL_CONNECTED) {
+        fetchCounterFromAPI();
+    }
     displayCounter();
+}
+
+/**
+ * @brief Fetch follower count from Instagram API
+ * @return True if successful
+ */
+bool fetchCounterFromAPI() {
+    bool success = false;
+    
+    // Check if WiFi is connected
+    if(WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        
+        Serial.println("Fetching follower count from API...");
+        Serial.print("API Endpoint: ");
+        Serial.println(API_ENDPOINT);
+        
+        // Enable more detailed debugging
+        http.setReuse(false);
+        
+        // Set HTTP request timeout to 30 seconds (30000 ms)
+        http.setTimeout(45000);
+        
+        // Start HTTP connection with more details
+        Serial.println("Starting HTTP connection...");
+        http.begin(API_ENDPOINT);
+        
+        // Make GET request
+        Serial.println("Sending GET request...");
+        int httpResponseCode = http.GET();
+        
+        // Debug HTTP response code
+        Serial.print("HTTP Response Code: ");
+        Serial.println(httpResponseCode);
+        
+        // Interpret error codes
+        if(httpResponseCode < 0) {
+            switch(httpResponseCode) {
+                case HTTPC_ERROR_CONNECTION_REFUSED:
+                    Serial.println("Error: Server refused connection");
+                    break;
+                case HTTPC_ERROR_SEND_HEADER_FAILED:
+                    Serial.println("Error: Failed to send headers");
+                    break;
+                case HTTPC_ERROR_SEND_PAYLOAD_FAILED:
+                    Serial.println("Error: Failed to send payload");
+                    break;
+                case HTTPC_ERROR_NOT_CONNECTED:
+                    Serial.println("Error: Not connected to server");
+                    break;
+                case HTTPC_ERROR_CONNECTION_LOST:
+                    Serial.println("Error: Connection lost");
+                    break;
+                case HTTPC_ERROR_NO_STREAM:
+                    Serial.println("Error: No data stream");
+                    break;
+                case HTTPC_ERROR_NO_HTTP_SERVER:
+                    Serial.println("Error: Not an HTTP server");
+                    break;
+                case HTTPC_ERROR_TOO_LESS_RAM:
+                    Serial.println("Error: Not enough RAM");
+                    break;
+                case HTTPC_ERROR_ENCODING:
+                    Serial.println("Error: Transfer encoding error");
+                    break;
+                case HTTPC_ERROR_STREAM_WRITE:
+                    Serial.println("Error: Stream write error");
+                    break;
+                case HTTPC_ERROR_READ_TIMEOUT:
+                    Serial.println("Error: Read timeout");
+                    break;
+                default:
+                    Serial.print("Unknown error: ");
+                    Serial.println(httpResponseCode);
+                    break;
+            }
+        }
+        
+        if(httpResponseCode == 200) {
+            // Successful response
+            String payload = http.getString();
+            Serial.println("API Response: " + payload);
+            
+            // Parse JSON response
+            DynamicJsonDocument doc(1024);
+            DeserializationError error = deserializeJson(doc, payload);
+            
+            if(!error) {
+                // Extract follower count
+                unsigned long followers = doc["followers_count"];
+                counter = followers;
+                
+                String username = doc["username"].as<String>();
+                String lastUpdated = doc["last_updated"].as<String>();
+                
+                Serial.printf("Updated follower count for %s: %lu (Last updated: %s)\n", 
+                    username.c_str(), counter, lastUpdated.c_str());
+                    
+                success = true;
+            } else {
+                Serial.print("JSON parsing error: ");
+                Serial.println(error.c_str());
+            }
+        } else {
+            Serial.print("HTTP Error: ");
+            Serial.println(httpResponseCode);
+        }
+        
+        // Print connection details for debugging
+        Serial.print("Connection close status: ");
+        http.end();
+        Serial.println("HTTP connection closed");
+    } else {
+        Serial.println("WiFi not connected, can't update follower count");
+        Serial.print("WiFi status: ");
+        Serial.println(WiFi.status());
+    }
+    
+    return success;
 }
 
 /**
@@ -27,13 +155,17 @@ bool updateCounter() {
         // Save the last update time
         lastCounterUpdate = currentMillis;
         
-        // Increment the counter
-        counter++;
+        // Fetch updated follower count from API
+        bool updated = fetchCounterFromAPI();
         
         // Debug info
-        Serial.printf("Counter updated to: %lu at time %lu ms\n", counter, currentMillis);
+        if(updated) {
+            Serial.printf("Counter updated from API to: %lu at time %lu ms\n", counter, currentMillis);
+        } else {
+            Serial.println("Failed to update counter from API, using previous value");
+        }
         
-        return true;
+        return updated;
     }
     
     return false;

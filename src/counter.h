@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Counter configuration
-#define COUNTER_UPDATE_INTERVAL 10000  // 10 seconds in milliseconds
+#define COUNTER_UPDATE_INTERVAL 10000  // 30 seconds in milliseconds
 #define COUNTER_DIGITS 5               // Number of digits to display
 
 // Function declarations
@@ -12,6 +12,12 @@
  * @brief Initialize the counter
  */
 void initCounter();
+
+/**
+ * @brief Fetch follower count from Instagram API
+ * @return True if successful
+ */
+bool fetchCounterFromAPI();
 
 /**
  * @brief Update the counter if enough time has passed
