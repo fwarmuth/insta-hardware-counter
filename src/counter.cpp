@@ -215,7 +215,7 @@ void displayCounter() {
     
     // Calculate width of each digit at this size (approximately 5*textSize pixels)
     const uint16_t digitWidth = 5 * textSize;
-    const uint16_t digitSpacing = 2; // Spacing between digits
+    const uint16_t digitSpacing = 1; // Spacing between digits
     
     // Calculate total width of counter display
     uint16_t totalWidth = (COUNTER_DIGITS * digitWidth) + ((COUNTER_DIGITS - 1) * digitSpacing);

@@ -89,7 +89,12 @@ void setup() {
  * 
  * Checks if counter needs updating and refreshes display when it does
  */
+
+u_long loopCounter = 0;
 void loop() {
+    loopCounter++;
+    // Take start time
+    unsigned long startMillis = millis();
     // Check WiFi connection and reconnect if needed
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("WiFi connection lost, attempting to reconnect...");
@@ -104,8 +109,11 @@ void loop() {
     bool counterUpdated = updateCounter();
     
     if (counterUpdated) {
-        Serial.println("Counter updated, refreshing display");
+        Serial.println("Counter updated");
     }
+    
+    // Clear the matrix display
+    matrix->clearScreen();
     
     // Always update the counter display
     displayCounter();
@@ -113,6 +121,16 @@ void loop() {
     // Make sure WiFi status indicator is still visible after display refresh
     updateWiFiStatusIndicator(WiFi.status() == WL_CONNECTED);
     
-    // Small delay to prevent CPU hogging
-    delay(100);
+    // Rate limit the loop to 250ms, but only if we haven't already exceeded that time
+    unsigned long elapsedTime = millis() - startMillis;
+    if (elapsedTime < 50) {
+        delay(50 - elapsedTime);
+    }
+    else {
+        Serial.println("Loop took longer than 50ms, skipping delay");
+    }
+    if (loopCounter % 1000 == 0) {
+        Serial.println("Loop counter: " + String(loopCounter));
+        Serial.println("Loop took: " + String(millis() - startMillis) + "ms");
+    }
 }
