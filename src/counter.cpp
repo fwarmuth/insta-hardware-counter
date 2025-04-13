@@ -7,16 +7,22 @@
 
 // Private counter variables
 static unsigned long counter = 0;
+static unsigned long prevCounter = 0; // Track previous value for comparison
 static unsigned long lastCounterUpdate = 0;
-static const char* API_ENDPOINT = "http://edge.warmuth.xyz:5000/api/instagram/metrics";
-// static const char* API_ENDPOINT = "http://intagram-api.dmz:5000/api/instagram/metrics";
+// static const char* API_ENDPOINT = "http://edge.warmuth.xyz:5000/api/instagram/metrics";
+static const char* API_ENDPOINT = "http://172.16.10.190:5000/api/instagram/metrics";
+
+// Simplified color - purple-blue
+static const uint16_t COUNTER_COLOR = 0x4A1F; // Purple-blue color in RGB565 format
 
 /**
  * @brief Initialize the counter
  */
 void initCounter() {
     counter = 0;
+    prevCounter = 0;
     lastCounterUpdate = millis();
+    
     // Try to get initial value from API
     if(WiFi.status() == WL_CONNECTED) {
         fetchCounterFromAPI();
@@ -155,6 +161,9 @@ bool updateCounter() {
         // Save the last update time
         lastCounterUpdate = currentMillis;
         
+        // Store the previous counter value for comparison
+        prevCounter = counter;
+        
         // Fetch updated follower count from API
         bool updated = fetchCounterFromAPI();
         
@@ -172,6 +181,24 @@ bool updateCounter() {
 }
 
 /**
+ * @brief Draw a single digit with the specified color
+ * @param digit The digit character to draw (0-9)
+ * @param x X-position to draw at
+ * @param y Y-position to draw at
+ * @param textSize Size of the text
+ * @param color Color to use for drawing
+ */
+void drawDigit(char digit, int16_t x, int16_t y, uint8_t textSize, uint16_t color) {
+    matrix->setCursor(x, y);
+    matrix->setTextColor(color);
+    matrix->setTextSize(textSize);
+    
+    // Draw the single digit
+    char digitStr[2] = {digit, '\0'};
+    matrix->print(digitStr);
+}
+
+/**
  * @brief Display the counter on the matrix
  */
 void displayCounter() {
@@ -182,27 +209,29 @@ void displayCounter() {
     char counterStr[20];
     sprintf(counterStr, "%0*lu", COUNTER_DIGITS, counter);
     
-    // Set text properties - size 2 for better visibility
-    matrix->setTextSize(2);
+    // Set text properties
+    uint8_t textSize = 2; // Base text size
     matrix->setTextWrap(false);
     
-    // Calculate width of each digit at this size (approximately 10 pixels)
-    const uint16_t digitWidth = 10;
-    // Include 2-pixel spacing between digits (except for the last digit)
-    uint16_t spacing = (COUNTER_DIGITS > 1) ? (COUNTER_DIGITS - 1) * 2 : 0;
-    uint16_t strWidth = (COUNTER_DIGITS * digitWidth) + spacing;
+    // Calculate width of each digit at this size (approximately 5*textSize pixels)
+    const uint16_t digitWidth = 5 * textSize;
+    const uint16_t digitSpacing = 2; // Spacing between digits
     
-    // Center text on display
-    uint16_t xPos = (PANE_WIDTH - strWidth) / 2;
-    uint16_t yPos = (PANE_HEIGHT - 16) / 2;  // 16 is the height of size 2 text
+    // Calculate total width of counter display
+    uint16_t totalWidth = (COUNTER_DIGITS * digitWidth) + ((COUNTER_DIGITS - 1) * digitSpacing);
     
-    // Set cursor and color
-    matrix->setCursor(xPos, yPos);
-    // Use a cycling color based on the counter value
-    matrix->setTextColor(colorWheel(counter * 10 % 255));
+    // Center the counter string horizontally and vertically
+    int16_t startX = (PANE_WIDTH - totalWidth) / 2;
+    int16_t startY = (PANE_HEIGHT - (8 * textSize)) / 2;  // 8 is height of size 1 text
     
-    // Print the counter string
-    matrix->print(counterStr);
+    // Draw each digit with the solid purple-blue color
+    for(uint8_t i = 0; i < COUNTER_DIGITS; i++) {
+        // Calculate position for this digit
+        int16_t digitX = startX + i * (digitWidth + digitSpacing);
+        
+        // Draw the digit with the fixed color
+        drawDigit(counterStr[i], digitX, startY, textSize, COUNTER_COLOR);
+    }
 }
 
 /**
