@@ -6,6 +6,7 @@ import sys
 import datetime
 import argparse
 from typing import Optional, Tuple, Dict
+from pathlib import Path
 
 # Add scripts directory to path to import the database module
 current_dir = os.path.dirname(os.path.realpath(__file__))
@@ -14,6 +15,39 @@ sys.path.append(current_dir)
 
 # Import the database module
 from db.instagram_db import InstagramDatabase
+
+# Define the session directory and file name format
+SESSION_DIR = os.path.join(parent_dir, 'data', 'sessions')
+
+def is_session_valid(username: str) -> bool:
+    """
+    Check if a session file exists and is less than a day old.
+    
+    Args:
+        username: Instagram login username
+        
+    Returns:
+        bool: True if a valid session exists, False otherwise
+    """
+    if not username:
+        return False
+    
+    # Create a safe filename from the username
+    session_filename = f"{username.lower().replace('.', '_')}.session"
+    session_path = os.path.join(SESSION_DIR, session_filename)
+    
+    # Check if session file exists
+    if not os.path.exists(session_path):
+        return False
+    
+    # Check if session is less than a day old
+    file_mtime = os.path.getmtime(session_path)
+    last_modified = datetime.datetime.fromtimestamp(file_mtime)
+    now = datetime.datetime.now()
+    age_hours = (now - last_modified).total_seconds() / 3600
+    
+    # Session is valid if less than 24 hours old
+    return age_hours < 24
 
 def get_instagram_metrics(
     username: str, 
@@ -54,17 +88,44 @@ def get_instagram_metrics(
     metrics = None
     db_record_id = None
     
+    # Create sessions directory if it doesn't exist
+    os.makedirs(SESSION_DIR, exist_ok=True)
+    
     # Get metrics from Instagram
     loader = instaloader.Instaloader()
     
-    # Login to Instagram to avoid rate limits and access private profiles
+    # Set up session filename if we have login credentials
+    session_filename = None
+    if login_username:
+        session_filename = f"{login_username.lower().replace('.', '_')}.session"
+        session_path = os.path.join(SESSION_DIR, session_filename)
+    
+    # Try to load existing session or login if needed
     if login_username and login_password:
-        try:
-            logging.info(f"Logging in with account {login_username}...")
-            loader.login(login_username, login_password)
-        except Exception as e:
-            logging.error(f"Login failed: {str(e)}")
-            return None, None
+        session_loaded = False
+        
+        # Check if there's a valid session file
+        if is_session_valid(login_username):
+            try:
+                logging.info(f"Attempting to use existing session for {login_username}...")
+                loader.load_session_from_file(login_username, session_path)
+                session_loaded = True
+                logging.info("Session loaded successfully")
+            except Exception as e:
+                logging.warning(f"Error loading session, will try to login: {str(e)}")
+                session_loaded = False
+        
+        # If no valid session exists or loading failed, login and save the session
+        if not session_loaded:
+            try:
+                logging.info(f"Logging in with account {login_username}...")
+                loader.login(login_username, login_password)
+                # Save the session for future use
+                loader.save_session_to_file(session_path)
+                logging.info(f"Session saved to {session_path}")
+            except Exception as e:
+                logging.error(f"Login failed: {str(e)}")
+                return None, None
     else:
         logging.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data. Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
     
