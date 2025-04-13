@@ -29,7 +29,7 @@ app = Flask(__name__)
 # Default Instagram username (can be configured)
 DEFAULT_USERNAME = "mein.kreis.pinneberg"
 # Cache freshness threshold (in seconds)
-CACHE_FRESHNESS_THRESHOLD = 60  # 1 minute
+CACHE_FRESHNESS_THRESHOLD = 5*60  # 5 minutes
 
 def get_latest_data(username: str = DEFAULT_USERNAME) -> Dict[str, Any]:
     """
