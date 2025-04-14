@@ -56,7 +56,8 @@ def get_instagram_metrics(
     retries: int = 1, 
     retry_delay: int = 5,
     login_username: str = None,
-    login_password: str = None
+    login_password: str = None,
+    loader: instaloader.Instaloader = None
 ) -> Tuple[Optional[Dict[str, int]], Optional[int]]:
     """
     Retrieves metrics (follower count and post count) for a given Instagram username 
@@ -70,6 +71,7 @@ def get_instagram_metrics(
         retry_delay: Delay between retries in seconds
         login_username: Instagram username for login
         login_password: Instagram password for login
+        loader: Pre-configured Instaloader instance (optional, to avoid duplicate logins)
         
     Returns:
         Tuple[Optional[Dict[str, int]], Optional[int]]: 
@@ -91,43 +93,47 @@ def get_instagram_metrics(
     # Create sessions directory if it doesn't exist
     os.makedirs(SESSION_DIR, exist_ok=True)
     
-    # Get metrics from Instagram
-    loader = instaloader.Instaloader()
-    
-    # Set up session filename if we have login credentials
-    session_filename = None
-    if login_username:
-        session_filename = f"{login_username.lower().replace('.', '_')}.session"
-        session_path = os.path.join(SESSION_DIR, session_filename)
-    
-    # Try to load existing session or login if needed
-    if login_username and login_password:
-        session_loaded = False
+    # Use provided loader or create a new one
+    if loader is None:
+        # Get metrics from Instagram
+        loader = instaloader.Instaloader()
         
-        # Check if there's a valid session file
-        if is_session_valid(login_username):
-            try:
-                logging.info(f"Attempting to use existing session for {login_username}...")
-                loader.load_session_from_file(login_username, session_path)
-                session_loaded = True
-                logging.info("Session loaded successfully")
-            except Exception as e:
-                logging.warning(f"Error loading session, will try to login: {str(e)}")
-                session_loaded = False
+        # Set up session filename if we have login credentials
+        session_filename = None
+        if login_username:
+            session_filename = f"{login_username.lower().replace('.', '_')}.session"
+            session_path = os.path.join(SESSION_DIR, session_filename)
         
-        # If no valid session exists or loading failed, login and save the session
-        if not session_loaded:
-            try:
-                logging.info(f"Logging in with account {login_username}...")
-                loader.login(login_username, login_password)
-                # Save the session for future use
-                loader.save_session_to_file(session_path)
-                logging.info(f"Session saved to {session_path}")
-            except Exception as e:
-                logging.error(f"Login failed: {str(e)}")
-                return None, None
+        # Try to load existing session or login if needed
+        if login_username and login_password:
+            session_loaded = False
+            
+            # Check if there's a valid session file
+            if is_session_valid(login_username):
+                try:
+                    logging.info(f"Attempting to use existing session for {login_username}...")
+                    loader.load_session_from_file(login_username, session_path)
+                    session_loaded = True
+                    logging.info("Session loaded successfully")
+                except Exception as e:
+                    logging.warning(f"Error loading session, will try to login: {str(e)}")
+                    session_loaded = False
+            
+            # If no valid session exists or loading failed, login and save the session
+            if not session_loaded:
+                try:
+                    logging.info(f"Logging in with account {login_username}...")
+                    loader.login(login_username, login_password)
+                    # Save the session for future use
+                    loader.save_session_to_file(session_path)
+                    logging.info(f"Session saved to {session_path}")
+                except Exception as e:
+                    logging.error(f"Login failed: {str(e)}")
+                    return None, None
+        else:
+            logging.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data. Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
     else:
-        logging.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data. Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
+        logging.info("Using provided Instaloader instance")
     
     for attempt in range(retries):
         try:
