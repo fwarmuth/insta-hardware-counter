@@ -34,7 +34,7 @@ app = Flask(__name__)
 # Default Instagram username (can be configured)
 DEFAULT_USERNAME = "mein.kreis.pinneberg"
 # Cache freshness threshold (in seconds)
-CACHE_FRESHNESS_THRESHOLD = 5*60  # 5 minutes
+CACHE_FRESHNESS_THRESHOLD = 15*60  # 5 minutes
 
 # Global instances
 _loader = None
