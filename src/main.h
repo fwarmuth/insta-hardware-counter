@@ -2,28 +2,22 @@
 #define MAIN_H
 
 #include <Arduino.h>
-#include <WiFi.h>
+#include "wifi_manager.h"
 
 // Serial communication settings
 #define BAUD_RATE 115200
 
-// WiFi settings
-#define WIFI_CONFIG_FILE "/wifi_config.txt"    // Path to WiFi config file in SPIFFS
-#define WIFI_CONNECT_TIMEOUT 10000             // WiFi connection timeout in milliseconds
+/**
+ * @brief Update the display with counter and status
+ */
+void updateDisplay();
 
 /**
- * @brief Reads WiFi credentials from config file in SPIFFS
- * @param ssid Buffer to store the SSID
- * @param password Buffer to store the password
- * @return True if credentials were successfully read from file
+ * @brief Manage the loop timing and log performance
+ * 
+ * @param startMillis Time when loop started
  */
-bool readWiFiCredentials(char* ssid, char* password);
-
-/**
- * @brief Connects to WiFi network
- * @return True if connection was successful
- */
-bool connectToWiFi();
+void manageLoopTiming(unsigned long startMillis);
 
 /**
  * @brief Setup function called once at startup

@@ -45,6 +45,25 @@ MatrixPanel_I2S_DMA* initMatrix() {
 }
 
 /**
+ * @brief Calculate RGB565 color from RGB components
+ * 
+ * @param r Red component (0-255)
+ * @param g Green component (0-255)
+ * @param b Blue component (0-255)
+ * @return RGB565 color value
+ */
+uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+    // Convert to RGB565 format (5 bits R, 6 bits G, 5 bits B)
+    r = r >> 3;  // 8 bits to 5 bits (0-31)
+    g = g >> 2;  // 8 bits to 6 bits (0-63)
+    b = b >> 3;  // 8 bits to 5 bits (0-31)
+    
+    return (r << 11) | (g << 5) | b;
+}
+
+// Removed drawDigit function to avoid duplicate definition (now only in counter.cpp)
+
+/**
  * @brief Display a bitmap on the matrix with support for both grayscale and RGB formats
  * 
  * Renders a bitmap to the LED matrix:
@@ -115,13 +134,8 @@ void displayBitmap(const uint8_t* bitmap, uint16_t width, uint16_t height,
                 uint8_t g = bitmap[byteIndex + 1];  // Green
                 uint8_t b = bitmap[byteIndex + 2];  // Blue
                 
-                // Convert to RGB565 format (5 bits R, 6 bits G, 5 bits B)
-                // Scale from 8-bit per channel (0-255) to bits per channel in RGB565
-                r = r >> 3;  // 8 bits to 5 bits (0-31)
-                g = g >> 2;  // 8 bits to 6 bits (0-63)
-                b = b >> 3;  // 8 bits to 5 bits (0-31)
-                
-                color = (r << 11) | (g << 5) | b;
+                // Convert to RGB565 format
+                color = rgb565(r, g, b);
             }
             else {
                 // Unsupported channel count, display in red to indicate error
@@ -201,17 +215,8 @@ bool displayJPEG(const char* filename, uint16_t x, uint16_t y, uint16_t maxWidth
     uint16_t displayHeight = round(jpegHeight * scale);
     
     // Calculate the top-left position if center positioning is requested
-    uint16_t startX = x;
-    uint16_t startY = y;
-    
-    if (centerPos) {
-        // Adjust to make x,y the center of the image
-        startX = x - (displayWidth / 2);
-        startY = y - (displayHeight / 2);
-    } else {
-        startX = x;
-        startY = y;
-    }
+    uint16_t startX = centerPos ? x - (displayWidth / 2) : x;
+    uint16_t startY = centerPos ? y - (displayHeight / 2) : y;
     
     // Output to serial for debugging
     Serial.print("JPEG dimensions: ");
@@ -224,6 +229,22 @@ bool displayJPEG(const char* filename, uint16_t x, uint16_t y, uint16_t maxWidth
     Serial.println(displayHeight);
     
     // Render the image
+    displayJPEGBlocks(startX, startY, scale, displayWidth, displayHeight);
+    
+    jpegFile.close();
+    return true;
+}
+
+/**
+ * @brief Helper function to display JPEG MCU blocks
+ * @param startX Starting X position
+ * @param startY Starting Y position
+ * @param scale Scale factor
+ * @param displayWidth Final display width
+ * @param displayHeight Final display height
+ */
+void displayJPEGBlocks(uint16_t startX, uint16_t startY, float scale, 
+                      uint16_t displayWidth, uint16_t displayHeight) {
     uint16_t mcu_w = JpegDec.MCUWidth;
     uint16_t mcu_h = JpegDec.MCUHeight;
     
@@ -257,7 +278,4 @@ bool displayJPEG(const char* filename, uint16_t x, uint16_t y, uint16_t maxWidth
             }
         }
     }
-    
-    jpegFile.close();
-    return true;
 }

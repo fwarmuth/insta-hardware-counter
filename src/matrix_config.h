@@ -85,6 +85,17 @@ void displayBitmap(const uint8_t* bitmap, uint16_t width, uint16_t height,
 bool displayJPEG(const char* filename, uint16_t x, uint16_t y, uint16_t maxWidth=0, uint16_t maxHeight=0, bool centerPos=false);
 
 /**
+ * @brief Helper function to display JPEG MCU blocks
+ * @param startX Starting X position
+ * @param startY Starting Y position
+ * @param scale Scale factor
+ * @param displayWidth Final display width
+ * @param displayHeight Final display height
+ */
+void displayJPEGBlocks(uint16_t startX, uint16_t startY, float scale, 
+                      uint16_t displayWidth, uint16_t displayHeight);
+
+/**
  * @brief Update the WiFi status indicator in the bottom left pixel
  * @param connected True if WiFi is connected, false otherwise
  */

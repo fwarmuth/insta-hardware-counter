@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Counter configuration
-#define COUNTER_UPDATE_INTERVAL 10000  // 30 seconds in milliseconds
+#define COUNTER_UPDATE_INTERVAL 10000  // 10 seconds in milliseconds
 #define COUNTER_DIGITS 5               // Number of digits to display
 
 // Function declarations
@@ -20,10 +20,26 @@ void initCounter();
 bool fetchCounterFromAPI();
 
 /**
+ * @brief Log HTTP error codes with descriptions
+ * @param httpResponseCode The error code to log
+ */
+void logHttpError(int httpResponseCode);
+
+/**
  * @brief Update the counter if enough time has passed
  * @return True if counter was updated
  */
 bool updateCounter();
+
+/**
+ * @brief Draw a single digit with the specified color
+ * @param digit The digit character to draw (0-9)
+ * @param x X-position to draw at
+ * @param y Y-position to draw at
+ * @param textSize Size of the text
+ * @param color Color to use for drawing
+ */
+void drawDigit(char digit, int16_t x, int16_t y, uint8_t textSize, uint16_t color);
 
 /**
  * @brief Display the counter on the matrix

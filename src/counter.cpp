@@ -9,10 +9,9 @@
 static unsigned long counter = 0;
 static unsigned long prevCounter = 0; // Track previous value for comparison
 static unsigned long lastCounterUpdate = 0;
-// static const char* API_ENDPOINT = "http://edge.warmuth.xyz:5000/api/instagram/metrics";
 static const char* API_ENDPOINT = "http://172.16.10.190:5000/api/instagram/metrics";
 
-// Simplified color - purple-blue
+// Counter display color
 static const uint16_t COUNTER_COLOR = 0x4A1F; // Purple-blue color in RGB565 format
 
 /**
@@ -45,65 +44,21 @@ bool fetchCounterFromAPI() {
         Serial.print("API Endpoint: ");
         Serial.println(API_ENDPOINT);
         
-        // Enable more detailed debugging
-        http.setReuse(false);
-        
-        // Set HTTP request timeout to 30 seconds (30000 ms)
+        // Set HTTP request timeout to 30 seconds
         http.setTimeout(45000);
         
-        // Start HTTP connection with more details
-        Serial.println("Starting HTTP connection...");
+        // Start HTTP connection
         http.begin(API_ENDPOINT);
         
         // Make GET request
-        Serial.println("Sending GET request...");
         int httpResponseCode = http.GET();
         
-        // Debug HTTP response code
         Serial.print("HTTP Response Code: ");
         Serial.println(httpResponseCode);
         
-        // Interpret error codes
+        // Handle error codes
         if(httpResponseCode < 0) {
-            switch(httpResponseCode) {
-                case HTTPC_ERROR_CONNECTION_REFUSED:
-                    Serial.println("Error: Server refused connection");
-                    break;
-                case HTTPC_ERROR_SEND_HEADER_FAILED:
-                    Serial.println("Error: Failed to send headers");
-                    break;
-                case HTTPC_ERROR_SEND_PAYLOAD_FAILED:
-                    Serial.println("Error: Failed to send payload");
-                    break;
-                case HTTPC_ERROR_NOT_CONNECTED:
-                    Serial.println("Error: Not connected to server");
-                    break;
-                case HTTPC_ERROR_CONNECTION_LOST:
-                    Serial.println("Error: Connection lost");
-                    break;
-                case HTTPC_ERROR_NO_STREAM:
-                    Serial.println("Error: No data stream");
-                    break;
-                case HTTPC_ERROR_NO_HTTP_SERVER:
-                    Serial.println("Error: Not an HTTP server");
-                    break;
-                case HTTPC_ERROR_TOO_LESS_RAM:
-                    Serial.println("Error: Not enough RAM");
-                    break;
-                case HTTPC_ERROR_ENCODING:
-                    Serial.println("Error: Transfer encoding error");
-                    break;
-                case HTTPC_ERROR_STREAM_WRITE:
-                    Serial.println("Error: Stream write error");
-                    break;
-                case HTTPC_ERROR_READ_TIMEOUT:
-                    Serial.println("Error: Read timeout");
-                    break;
-                default:
-                    Serial.print("Unknown error: ");
-                    Serial.println(httpResponseCode);
-                    break;
-            }
+            logHttpError(httpResponseCode);
         }
         
         if(httpResponseCode == 200) {
@@ -136,8 +91,6 @@ bool fetchCounterFromAPI() {
             Serial.println(httpResponseCode);
         }
         
-        // Print connection details for debugging
-        Serial.print("Connection close status: ");
         http.end();
         Serial.println("HTTP connection closed");
     } else {
@@ -147,6 +100,52 @@ bool fetchCounterFromAPI() {
     }
     
     return success;
+}
+
+/**
+ * @brief Log HTTP error codes with descriptions
+ * @param httpResponseCode The error code to log
+ */
+void logHttpError(int httpResponseCode) {
+    switch(httpResponseCode) {
+        case HTTPC_ERROR_CONNECTION_REFUSED:
+            Serial.println("Error: Server refused connection");
+            break;
+        case HTTPC_ERROR_SEND_HEADER_FAILED:
+            Serial.println("Error: Failed to send headers");
+            break;
+        case HTTPC_ERROR_SEND_PAYLOAD_FAILED:
+            Serial.println("Error: Failed to send payload");
+            break;
+        case HTTPC_ERROR_NOT_CONNECTED:
+            Serial.println("Error: Not connected to server");
+            break;
+        case HTTPC_ERROR_CONNECTION_LOST:
+            Serial.println("Error: Connection lost");
+            break;
+        case HTTPC_ERROR_NO_STREAM:
+            Serial.println("Error: No data stream");
+            break;
+        case HTTPC_ERROR_NO_HTTP_SERVER:
+            Serial.println("Error: Not an HTTP server");
+            break;
+        case HTTPC_ERROR_TOO_LESS_RAM:
+            Serial.println("Error: Not enough RAM");
+            break;
+        case HTTPC_ERROR_ENCODING:
+            Serial.println("Error: Transfer encoding error");
+            break;
+        case HTTPC_ERROR_STREAM_WRITE:
+            Serial.println("Error: Stream write error");
+            break;
+        case HTTPC_ERROR_READ_TIMEOUT:
+            Serial.println("Error: Read timeout");
+            break;
+        default:
+            Serial.print("Unknown error: ");
+            Serial.println(httpResponseCode);
+            break;
+    }
 }
 
 /**
@@ -202,9 +201,6 @@ void drawDigit(char digit, int16_t x, int16_t y, uint8_t textSize, uint16_t colo
  * @brief Display the counter on the matrix
  */
 void displayCounter() {
-    // Clear the screen before drawing
-    matrix->clearScreen();
-    
     // Convert the counter to a string with leading zeros
     char counterStr[20];
     sprintf(counterStr, "%0*lu", COUNTER_DIGITS, counter);
@@ -213,23 +209,18 @@ void displayCounter() {
     uint8_t textSize = 2; // Base text size
     matrix->setTextWrap(false);
     
-    // Calculate width of each digit at this size (approximately 5*textSize pixels)
+    // Calculate width of each digit and total width
     const uint16_t digitWidth = 5 * textSize;
-    const uint16_t digitSpacing = 1; // Spacing between digits
-    
-    // Calculate total width of counter display
+    const uint16_t digitSpacing = 1;
     uint16_t totalWidth = (COUNTER_DIGITS * digitWidth) + ((COUNTER_DIGITS - 1) * digitSpacing);
     
     // Center the counter string horizontally and vertically
     int16_t startX = (PANE_WIDTH - totalWidth) / 2;
-    int16_t startY = (PANE_HEIGHT - (8 * textSize)) / 2;  // 8 is height of size 1 text
+    int16_t startY = (PANE_HEIGHT - (8 * textSize)) / 2;
     
-    // Draw each digit with the solid purple-blue color
+    // Draw each digit
     for(uint8_t i = 0; i < COUNTER_DIGITS; i++) {
-        // Calculate position for this digit
         int16_t digitX = startX + i * (digitWidth + digitSpacing);
-        
-        // Draw the digit with the fixed color
         drawDigit(counterStr[i], digitX, startY, textSize, COUNTER_COLOR);
     }
 }
@@ -251,14 +242,11 @@ unsigned long getCounterValue() {
  * @param y Y position to display the icon (top left corner)
  */
 void displayIcon(const uint8_t* iconData, uint16_t primaryColor, uint16_t secondaryColor, int16_t x, int16_t y) {
-    // Each byte represents 8 pixels in the iconData
-    // The 24x24 icon requires 24*24/8 = 72 bytes of data
     const uint8_t iconWidth = 24;
     const uint8_t iconHeight = 24;
     
-    // Loop through each row of the icon
+    // Loop through each row and column of the icon
     for (uint8_t row = 0; row < iconHeight; row++) {
-        // Loop through each column of the icon
         for (uint8_t col = 0; col < iconWidth; col++) {
             // Calculate which byte and bit contain the pixel data
             uint16_t byteIndex = (row * iconWidth + col) / 8;
@@ -276,7 +264,7 @@ void displayIcon(const uint8_t* iconData, uint16_t primaryColor, uint16_t second
                 // If bit is 1, use primary color, otherwise use secondary color
                 uint16_t pixelColor = isSet ? primaryColor : secondaryColor;
                 
-                // Draw the pixel only if non-transparent (assuming 0 is transparent)
+                // Draw the pixel only if non-transparent
                 if (pixelColor != 0) {
                     matrix->drawPixel(pixelX, pixelY, pixelColor);
                 }
