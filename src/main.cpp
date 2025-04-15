@@ -7,12 +7,119 @@
 #include <WiFi.h>
 
 /**
+ * @brief Reads WiFi credentials from config file in SPIFFS
+ * 
+ * @param ssid Buffer to store the SSID
+ * @param password Buffer to store the password
+ * @return True if credentials were successfully read from file
+ */
+bool readWiFiCredentials(char* ssid, char* password) {
+    // Check if SPIFFS is mounted
+    if (!SPIFFS.begin(true)) {
+        Serial.println("Failed to mount SPIFFS");
+        return false;
+    }
+    
+    // Try to open the config file
+    File configFile = SPIFFS.open(WIFI_CONFIG_FILE, "r");
+    
+    if (!configFile) {
+        Serial.println("Failed to open WiFi config file");
+        // Print all files in SPIFFS root directory for debugging
+        File root = SPIFFS.open("/");
+        File file = root.openNextFile();
+        Serial.println("Files in SPIFFS:");
+        while(file) {
+            Serial.print("  ");
+            Serial.print(file.name());
+            Serial.print(" (");
+            Serial.print(file.size());
+            Serial.println(" bytes)");
+            file = root.openNextFile();
+        }
+        return false;
+    }
+    
+    // Read SSID from first line
+    String ssidString = configFile.readStringUntil('\n');
+    ssidString.trim();
+    
+    // Read password from second line
+    String passwordString = configFile.readStringUntil('\n');
+    passwordString.trim();
+    
+    configFile.close();
+    
+    // Check if both values were read
+    if (ssidString.length() == 0 || passwordString.length() == 0) {
+        Serial.println("WiFi config file format is invalid");
+        return false;
+    }
+    
+    // Make sure we don't overflow the buffers
+    size_t ssidLen = ssidString.length();
+    size_t pwdLen = passwordString.length();
+    
+    // Copy with caution to avoid buffer overflow
+    memset(ssid, 0, 32);  // Clear buffer first
+    memset(password, 0, 64);  // Clear buffer first
+    
+    // Copy only what will fit in the buffer (leaving room for null terminator)
+    if (ssidLen >= 32) ssidLen = 31;
+    if (pwdLen >= 64) pwdLen = 63;
+    
+    memcpy(ssid, ssidString.c_str(), ssidLen);
+    memcpy(password, passwordString.c_str(), pwdLen);
+    
+    // Ensure null termination
+    ssid[ssidLen] = '\0';
+    password[pwdLen] = '\0';
+    
+    // Debug output
+    Serial.println("WiFi credentials loaded from config file");
+    Serial.print("SSID: [");
+    Serial.print(ssid);
+    Serial.println("]");
+    Serial.print("SSID length: ");
+    Serial.println(ssidLen);
+    
+    Serial.print("Password: [");
+    Serial.print(password);
+    Serial.println("]");
+    Serial.print("Password length: ");
+    Serial.println(pwdLen);
+    
+    // Print hexdump of SSID for debugging encoding issues
+    Serial.println("SSID hex values:");
+    for (size_t i = 0; i < ssidLen; i++) {
+        Serial.print("0x");
+        if ((uint8_t)ssid[i] < 0x10) Serial.print("0");
+        Serial.print((uint8_t)ssid[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    return true;
+}
+
+/**
  * @brief Connects to WiFi network
  * 
  * @return True if connection was successful
  */
 bool connectToWiFi() {
-    Serial.printf("Connecting to WiFi network: %s\n", WIFI_SSID);
+    // Buffers to store credentials
+    char ssid[32] = "";
+    char password[64] = "";
+    
+    // Try to read credentials from file
+    if (!readWiFiCredentials(ssid, password)) {
+        Serial.println("Failed to read WiFi credentials from file");
+        updateWiFiStatusIndicator(false);
+        return false;
+    }
+    
+    Serial.printf("Connecting to WiFi network: %s\n", ssid);
     
     // Update indicator to show disconnected status
     updateWiFiStatusIndicator(false);
@@ -21,7 +128,7 @@ bool connectToWiFi() {
     WiFi.mode(WIFI_STA);
     
     // Start WiFi connection
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(ssid, password);
     
     // Set timeout for connection
     unsigned long connectionStartTime = millis();
