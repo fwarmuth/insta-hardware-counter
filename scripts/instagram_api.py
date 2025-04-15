@@ -102,10 +102,9 @@ class CredentialManager:
 
     def get_current_credentials(self) -> Tuple[str, str]:
         """Get the current username and password"""
-        with self.lock:
-            if self._rotate_credential():
-                logger.info("Rotating credentials due to time interval")
-            return self.current_credential.username, self.current_credential.password
+        if self._rotate_credential():
+            logger.info("Rotating credentials due to time interval")
+        return self.current_credential.username, self.current_credential.password
 
 def init_credential_manager() -> CredentialManager:
     """Initialize or return the existing credential manager"""
