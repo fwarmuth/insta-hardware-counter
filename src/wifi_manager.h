@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <SPIFFS.h>
 #include <ArduinoOTA.h>  // Include the OTA library
+#include "matrix_config.h" // For access to the updateStatusIndicator function
 
 // WiFi settings
 #define WIFI_CONFIG_FILE "/wifi_config.txt"    // Path to WiFi config file in SPIFFS
@@ -12,7 +13,7 @@
 
 // OTA settings
 #define OTA_HOSTNAME "insta_counter"
-#define OTA_PASSWORD "your_ota_password"
+#define OTA_PASSWORD "your_ota_password"       // Make sure this matches platformio.ini upload_flags auth
 
 /**
  * @brief Lists all files in SPIFFS root directory
@@ -67,13 +68,5 @@ void handleOTA();
  * @brief Initialize WiFi connection
  */
 void initWiFi();
-
-/**
- * @brief Declaration for the display status indicator function
- * This function is implemented elsewhere in the project
- * 
- * @param connected WiFi connection status
- */
-void updateWiFiStatusIndicator(bool connected);
 
 #endif // WIFI_MANAGER_H

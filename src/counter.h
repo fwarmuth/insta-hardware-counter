@@ -62,4 +62,10 @@ void displayIcon(const uint8_t* iconData, uint16_t primaryColor, uint16_t second
  */
 unsigned long getCounterValue();
 
+/**
+ * @brief Get the status of the last API request
+ * @return True if the last API request was successful, false otherwise
+ */
+bool isLastRequestSuccessful();
+
 #endif // COUNTER_H

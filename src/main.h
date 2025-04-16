@@ -7,6 +7,9 @@
 // Serial communication settings
 #define BAUD_RATE 115200
 
+// Application settings
+#define REFRESH_INTERVAL 500 // Display refresh interval in milliseconds
+
 /**
  * @brief Update the display with counter and status
  */

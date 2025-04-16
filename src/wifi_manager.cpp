@@ -112,12 +112,12 @@ bool connectToWiFi() {
     
     if (!readWiFiCredentials(ssid, password)) {
         Serial.println("Failed to read WiFi credentials from file");
-        updateWiFiStatusIndicator(false);
+        updateStatusIndicator(false, false);
         return false;
     }
     
     Serial.printf("Connecting to WiFi network: %s\n", ssid);
-    updateWiFiStatusIndicator(false);
+    updateStatusIndicator(false, false);
     
     WiFi.mode(WIFI_STA);
     // Set the hostname before connecting
@@ -131,7 +131,7 @@ bool connectToWiFi() {
     while (WiFi.status() != WL_CONNECTED) {
         if (millis() - connectionStartTime > WIFI_CONNECT_TIMEOUT) {
             Serial.println("WiFi connection failed, timeout reached");
-            updateWiFiStatusIndicator(false);
+            updateStatusIndicator(false, false);
             return false;
         }
         
@@ -145,7 +145,9 @@ bool connectToWiFi() {
     Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
     Serial.printf("Signal strength (RSSI): %d dBm\n", WiFi.RSSI());
     
-    updateWiFiStatusIndicator(true);
+    // Update status - WiFi connected, but counter status stays the same
+    extern bool isLastRequestSuccessful();
+    updateStatusIndicator(true, isLastRequestSuccessful());
     return true;
 }
 
@@ -153,11 +155,21 @@ bool connectToWiFi() {
  * @brief Check WiFi connection and reconnect if needed
  */
 void checkAndMaintainWiFi() {
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("WiFi connection lost, attempting to reconnect...");
-        connectToWiFi();
-    } else {
-        updateWiFiStatusIndicator(true);
+    static bool prevWifiConnected = false;
+    bool currentlyConnected = (WiFi.status() == WL_CONNECTED);
+    
+    // Only take action if connection state has changed
+    if (currentlyConnected != prevWifiConnected) {
+        prevWifiConnected = currentlyConnected;
+        
+        if (!currentlyConnected) {
+            Serial.println("WiFi connection lost, attempting to reconnect...");
+            connectToWiFi();
+        } else {
+            // WiFi connection was restored
+            extern bool isLastRequestSuccessful();
+            updateStatusIndicator(true, isLastRequestSuccessful());
+        }
     }
 }
 
@@ -176,9 +188,11 @@ void initWiFi() {
 void initOTA() {
     // Configure OTA hostname
     ArduinoOTA.setHostname(OTA_HOSTNAME);
+    Serial.printf("OTA hostname set to: %s\n", OTA_HOSTNAME);
     
     // Set password for OTA updates
     ArduinoOTA.setPassword(OTA_PASSWORD);
+    Serial.printf("OTA password configured (password: %s)\n", OTA_PASSWORD);
     
     // OTA callbacks
     ArduinoOTA.onStart([]() {

@@ -6,13 +6,23 @@
 MatrixPanel_I2S_DMA *matrix = nullptr;
 
 /**
- * @brief Update the WiFi status indicator in the bottom left pixel
- * @param connected True if WiFi is connected, false otherwise
+ * @brief Update the status indicator in the bottom left pixel
+ * @param wifiConnected True if WiFi is connected, false otherwise
+ * @param updateSuccessful True if counter update was successful, false if there was an error
  */
-void updateWiFiStatusIndicator(bool connected) {
+void updateStatusIndicator(bool wifiConnected, bool updateSuccessful) {
     if (matrix != nullptr) {
+        uint16_t color;
+        
+        if (!wifiConnected) {
+            color = WIFI_DISCONNECTED_COLOR; // Red when WiFi is disconnected
+        } else if (!updateSuccessful) {
+            color = COUNTER_ERROR_COLOR;     // Orange when WiFi works but update failed
+        } else {
+            color = WIFI_CONNECTED_COLOR;    // Green when everything works
+        }
+        
         // Draw a single pixel at bottom left corner (0, PANEL_HEIGHT-1)
-        uint16_t color = connected ? WIFI_CONNECTED_COLOR : WIFI_DISCONNECTED_COLOR;
         matrix->drawPixel(0, PANEL_HEIGHT-1, color);
     }
 }
@@ -39,7 +49,7 @@ MatrixPanel_I2S_DMA* initMatrix() {
     matrix->setBrightness8(255);
     
     // Initialize WiFi status indicator as disconnected by default
-    updateWiFiStatusIndicator(false);
+    updateStatusIndicator(false, false);
     
     return matrix;
 }

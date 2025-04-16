@@ -14,7 +14,7 @@ void setup() {
     Serial.println("Starting counter application...");
     
     if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS initialization failed!");
+        Serial.println("SPIFFS initialization failed.");
     } else {
         Serial.println("SPIFFS initialized successfully.");
     }
@@ -65,7 +65,10 @@ void loop() {
 void updateDisplay() {
     matrix->clearScreen();
     displayCounter();
-    updateWiFiStatusIndicator(WiFi.status() == WL_CONNECTED);
+    
+    // Update status indicator with both WiFi and counter status
+    bool wifiConnected = WiFi.status() == WL_CONNECTED;
+    updateStatusIndicator(wifiConnected, isLastRequestSuccessful());
 }
 
 /**
@@ -77,10 +80,10 @@ void manageLoopTiming(unsigned long startMillis) {
     unsigned long elapsedTime = millis() - startMillis;
     
     // Add delay if needed
-    if (elapsedTime < 50) {
-        delay(50 - elapsedTime);
+    if (elapsedTime < REFRESH_INTERVAL) {
+        delay(REFRESH_INTERVAL - elapsedTime);
     } else {
-        Serial.println("Loop took longer than 50ms, skipping delay");
+        Serial.printf("Loop took longer than %dms, skipping delay\n", REFRESH_INTERVAL);
     }
     
     // Log performance occasionally

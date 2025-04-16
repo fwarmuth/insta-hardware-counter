@@ -31,8 +31,13 @@
 #define NUM_LEDS (PANE_WIDTH * PANE_HEIGHT)
 
 // WiFi status indicator colors
-#define WIFI_CONNECTED_COLOR 0x07E0    // Green in RGB565
-#define WIFI_DISCONNECTED_COLOR 0xF800  // Red in RGB565
+#define WIFI_CONNECTED_COLOR 0x07E0     // Green
+#define WIFI_DISCONNECTED_COLOR 0xF800  // Red
+#define COUNTER_ERROR_COLOR 0xFC00      // Orange
+
+// Counter status indicator colors
+#define COUNTER_UPDATED_COLOR 0x07E0    // Green
+#define COUNTER_ERROR_COLOR 0xFC00      // Orange
 
 // Function declarations
 /**
@@ -96,10 +101,11 @@ void displayJPEGBlocks(uint16_t startX, uint16_t startY, float scale,
                       uint16_t displayWidth, uint16_t displayHeight);
 
 /**
- * @brief Update the WiFi status indicator in the bottom left pixel
- * @param connected True if WiFi is connected, false otherwise
+ * @brief Update the status indicator in the bottom left pixel
+ * @param wifiConnected True if WiFi is connected, false otherwise
+ * @param updateSuccessful True if counter update was successful, false if there was an error
  */
-void updateWiFiStatusIndicator(bool connected);
+void updateStatusIndicator(bool wifiConnected, bool updateSuccessful);
 
 extern MatrixPanel_I2S_DMA *matrix;
 

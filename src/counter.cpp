@@ -10,6 +10,7 @@ static unsigned long counter = 0;
 static unsigned long prevCounter = 0; // Track previous value for comparison
 static unsigned long lastCounterUpdate = 0;
 static const char* API_ENDPOINT = "http://172.16.10.190:5000/api/instagram/metrics";
+static bool lastRequestSuccessful = false; // Track if the last API request was successful
 
 // Counter display color
 static const uint16_t COUNTER_COLOR = 0x4A1F; // Purple-blue color in RGB565 format
@@ -21,6 +22,7 @@ void initCounter() {
     counter = 0;
     prevCounter = 0;
     lastCounterUpdate = millis();
+    lastRequestSuccessful = false;
     
     // Try to get initial value from API
     if(WiFi.status() == WL_CONNECTED) {
@@ -82,21 +84,30 @@ bool fetchCounterFromAPI() {
                     username.c_str(), counter, lastUpdated.c_str());
                     
                 success = true;
+                lastRequestSuccessful = true;
             } else {
                 Serial.print("JSON parsing error: ");
                 Serial.println(error.c_str());
+                lastRequestSuccessful = false;
             }
         } else {
             Serial.print("HTTP Error: ");
             Serial.println(httpResponseCode);
+            lastRequestSuccessful = false;
         }
         
         http.end();
         Serial.println("HTTP connection closed");
+        
+        // Update the status indicator with WiFi connected and the API request status
+        updateStatusIndicator(true, lastRequestSuccessful);
     } else {
         Serial.println("WiFi not connected, can't update follower count");
         Serial.print("WiFi status: ");
         Serial.println(WiFi.status());
+        
+        // WiFi is not connected, set status indicator to disconnected
+        updateStatusIndicator(false, false);
     }
     
     return success;
@@ -231,6 +242,14 @@ void displayCounter() {
  */
 unsigned long getCounterValue() {
     return counter;
+}
+
+/**
+ * @brief Get the status of the last API request
+ * @return True if the last API request was successful, false otherwise
+ */
+bool isLastRequestSuccessful() {
+    return lastRequestSuccessful;
 }
 
 /**
