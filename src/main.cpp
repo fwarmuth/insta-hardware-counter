@@ -5,7 +5,7 @@
 #include <SPIFFS.h>
 #include "instagram_logo.h"
 #include "wifi_manager.h"
-#include "animation_manager.h"
+#include "animations/animation_manager.h"
 
 // Global animation manager instance
 AnimationManager animationManager;

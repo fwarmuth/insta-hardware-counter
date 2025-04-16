@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include "wifi_manager.h"
-#include "animation_manager.h"
+#include "animations/animation_manager.h"
 
 // Serial communication settings
 #define BAUD_RATE 115200
