@@ -48,6 +48,7 @@ void initAnimations() {
     // Set animation durations (configurable)
     animationManager.setAnimationDuration(STYLE_SIMPLE_COUNTER, 10000);    // 10 seconds
     animationManager.setAnimationDuration(STYLE_RANDOM_POSITION, 10000);   // 10 seconds
+    animationManager.setAnimationDuration(STYLE_COLOR_TRANSITION, 15000);  // 15 seconds
     
     Serial.println("Animations initialized");
 }

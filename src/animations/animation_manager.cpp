@@ -37,6 +37,10 @@ void AnimationManager::init() {
         animations[STYLE_RANDOM_POSITION] = new RandomPositionAnimation(10000); // 10 seconds
     }
     
+    if (animations[STYLE_COLOR_TRANSITION] == nullptr) {
+        animations[STYLE_COLOR_TRANSITION] = new ColorTransitionAnimation(10000, 5000); // 10 seconds animation, 5 seconds color transition
+    }
+    
     // Initialize with the first style
     currentStyle = STYLE_SIMPLE_COUNTER;
     

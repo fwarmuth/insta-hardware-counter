@@ -4,6 +4,7 @@
 #include "animation_base.h"
 #include "simple_counter_animation.h"
 #include "random_position_animation.h"
+#include "color_transition_animation.h"
 
 // Animation styles enumeration
 enum AnimationStyle {
@@ -11,6 +12,7 @@ enum AnimationStyle {
     STYLE_RANDOM_POSITION,
     
     // Add new styles here
+    STYLE_COLOR_TRANSITION,
     
     STYLE_COUNT  // Always keep this as last item for tracking the total count
 };

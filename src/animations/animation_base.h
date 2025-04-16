@@ -38,7 +38,7 @@ public:
     /**
      * @brief Reset the animation timer
      */
-    void reset();
+    virtual void reset();
     
     /**
      * @brief Set the animation duration
