@@ -5,6 +5,10 @@
 #include <SPIFFS.h>
 #include "instagram_logo.h"
 #include "wifi_manager.h"
+#include "animation_manager.h"
+
+// Global animation manager instance
+AnimationManager animationManager;
 
 /**
  * @brief Setup function called once at startup
@@ -28,7 +32,24 @@ void setup() {
     initOTA();
     
     initCounter();
+    
+    // Initialize animations
+    initAnimations();
+    
     Serial.println("Initialization complete.");
+}
+
+/**
+ * @brief Initialize the animation system
+ */
+void initAnimations() {
+    animationManager.init();
+    
+    // Set animation durations (configurable)
+    animationManager.setAnimationDuration(STYLE_SIMPLE_COUNTER, 10000);    // 10 seconds
+    animationManager.setAnimationDuration(STYLE_RANDOM_POSITION, 10000);   // 10 seconds
+    
+    Serial.println("Animations initialized");
 }
 
 /**
@@ -64,7 +85,13 @@ void loop() {
  */
 void updateDisplay() {
     matrix->clearScreen();
-    displayCounter();
+    
+    // Use animation manager to draw the counter with the current animation style
+    bool needsRefresh = animationManager.update(getCounterValue());
+    if (needsRefresh) {
+        // Animation state changed and needs a refresh
+        Serial.println("Animation refreshed");
+    }
     
     // Update status indicator with both WiFi and counter status
     bool wifiConnected = WiFi.status() == WL_CONNECTED;

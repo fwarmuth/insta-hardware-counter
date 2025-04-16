@@ -3,12 +3,21 @@
 
 #include <Arduino.h>
 #include "wifi_manager.h"
+#include "animation_manager.h"
 
 // Serial communication settings
 #define BAUD_RATE 115200
 
 // Application settings
 #define REFRESH_INTERVAL 500 // Display refresh interval in milliseconds
+
+// Global animation manager
+extern AnimationManager animationManager;
+
+/**
+ * @brief Initialize the animation system
+ */
+void initAnimations();
 
 /**
  * @brief Update the display with counter and status
