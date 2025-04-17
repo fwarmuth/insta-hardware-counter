@@ -85,7 +85,7 @@ def get_instagram_metrics(
     
     # Default database path is relative to the project root
     if db_path is None:
-        db_path = os.path.join(parent_dir, 'data', 'instagram_metrics.db')
+        db_path = os.path.join(parent_dir, 'instagram_metrics.db')
     
     metrics = None
     db_record_id = None
@@ -93,48 +93,15 @@ def get_instagram_metrics(
     # Create sessions directory if it doesn't exist
     os.makedirs(SESSION_DIR, exist_ok=True)
     
-    # Use provided loader or create a new one
+    # Set up loader instance if none provided
     if loader is None:
-        # Get metrics from Instagram
-        loader = instaloader.Instaloader()
-        
-        # Set up session filename if we have login credentials
-        session_filename = None
-        if login_username:
-            session_filename = f"{login_username.lower().replace('.', '_')}.session"
-            session_path = os.path.join(SESSION_DIR, session_filename)
-        
-        # Try to load existing session or login if needed
-        if login_username and login_password:
-            session_loaded = False
-            
-            # Check if there's a valid session file
-            if is_session_valid(login_username):
-                try:
-                    logging.info(f"Attempting to use existing session for {login_username}...")
-                    loader.load_session_from_file(login_username, session_path)
-                    session_loaded = True
-                    logging.info("Session loaded successfully")
-                except Exception as e:
-                    logging.warning(f"Error loading session, will try to login: {str(e)}")
-                    session_loaded = False
-            
-            # If no valid session exists or loading failed, login and save the session
-            if not session_loaded:
-                try:
-                    logging.info(f"Logging in with account {login_username}...")
-                    loader.login(login_username, login_password)
-                    # Save the session for future use
-                    loader.save_session_to_file(session_path)
-                    logging.info(f"Session saved to {session_path}")
-                except Exception as e:
-                    logging.error(f"Login failed: {str(e)}")
-                    return None, None
-        else:
-            logging.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting or restricted access to data. Consider setting INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables.")
+        loader = setup_loader(login_username, login_password)
+        if loader is None:
+            return None, None
     else:
         logging.info("Using provided Instaloader instance")
     
+    # Attempt to retrieve metrics with retries
     for attempt in range(retries):
         try:
             logging.info(f"Retrieving metrics for {username} (attempt {attempt+1}/{retries})...")
@@ -152,8 +119,10 @@ def get_instagram_metrics(
             logging.info(f"Successfully retrieved metrics for {username}: {metrics}")
             break
         except instaloader.exceptions.ConnectionException:
-            logging.warning(f"Connection error on attempt {attempt+1}/{retries}. Retrying in {retry_delay} seconds...")
-            time.sleep(retry_delay)
+            logging.warning(f"Connection error on attempt {attempt+1}/{retries}.")
+            if attempt < retries - 1:  # Don't sleep after the last attempt
+                logging.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
         except instaloader.exceptions.ProfileNotExistsException:
             logging.error(f"Profile '{username}' does not exist.")
             return None, None
@@ -166,14 +135,73 @@ def get_instagram_metrics(
         return None, None
     
     # Store in database if requested
-    if store_in_db and metrics is not None:
+    if store_in_db:
+        db_record_id = store_metrics_in_db(username, metrics, db_path)
+    
+    return metrics, db_record_id
+
+def setup_loader(login_username: str = None, login_password: str = None) -> Optional[instaloader.Instaloader]:
+    """
+    Set up and authenticate an Instaloader instance
+    
+    Args:
+        login_username: Instagram login username
+        login_password: Instagram login password
+        
+    Returns:
+        Authenticated Instaloader instance or None if authentication fails
+    """
+    loader = instaloader.Instaloader()
+    
+    # If no credentials provided, return unauthenticated loader with warning
+    if not login_username or not login_password:
+        logging.warning("WARNING: No Instagram login credentials provided. This may lead to rate limiting.")
+        return loader
+    
+    # Set up session filename
+    session_filename = f"{login_username.lower().replace('.', '_')}.session"
+    session_path = os.path.join(SESSION_DIR, session_filename)
+    
+    # Try to load existing session if valid
+    if is_session_valid(login_username):
         try:
-            # Create timestamp
-            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            # Store in database
-            db = InstagramDatabase(db_path)
-            # Store both follower count and post count, leave recent_posts_count as None for now
+            logging.info(f"Using existing session for {login_username}...")
+            loader.load_session_from_file(login_username, session_path)
+            logging.info("Session loaded successfully")
+            return loader
+        except Exception as e:
+            logging.warning(f"Error loading session: {str(e)}")
+    
+    # If no valid session exists or loading failed, login and save the session
+    try:
+        logging.info(f"Logging in with account {login_username}...")
+        loader.login(login_username, login_password)
+        loader.save_session_to_file(session_path)
+        logging.info(f"Session saved to {session_path}")
+        return loader
+    except Exception as e:
+        logging.error(f"Login failed: {str(e)}")
+        return None
+
+def store_metrics_in_db(username: str, metrics: Dict[str, int], db_path: str) -> Optional[int]:
+    """
+    Store metrics in the database
+    
+    Args:
+        username: The Instagram username
+        metrics: Dictionary with metrics data
+        db_path: Path to the database file
+        
+    Returns:
+        Record ID if successful, None otherwise
+    """
+    try:
+        # Create timestamp
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Store in database
+        db = InstagramDatabase(db_path)
+        try:
             db_record_id = db.store_metrics(
                 username=username,
                 followers_count=metrics['followers'],
@@ -181,13 +209,13 @@ def get_instagram_metrics(
                 recent_posts_count=None,
                 timestamp=timestamp
             )
-            db.close()
-            
             logging.info(f"Stored metrics in database with record ID: {db_record_id}")
-        except Exception as e:
-            logging.error(f"Error storing metrics in database: {str(e)}")
-    
-    return metrics, db_record_id
+            return db_record_id
+        finally:
+            db.close()
+    except Exception as e:
+        logging.error(f"Error storing metrics in database: {str(e)}")
+        return None
 
 # For backward compatibility
 def get_follower_count(username: str, store_in_db: bool = True, db_path: str = None, retries: int = 3, retry_delay: int = 5):
