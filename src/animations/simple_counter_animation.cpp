@@ -1,12 +1,24 @@
 #include "simple_counter_animation.h"
 #include "matrix_config.h"
 #include "counter.h"
+#include "color_utils.h"
 
 /**
- * @brief Constructor with configurable duration
+ * @brief Constructor with configurable duration and color
  * @param durationMs Animation duration in milliseconds
+ * @param color Color to use for the counter
  */
-SimpleCounterAnimation::SimpleCounterAnimation(unsigned long durationMs) : AnimationBase(durationMs) {
+SimpleCounterAnimation::SimpleCounterAnimation(unsigned long durationMs, uint16_t color) : 
+    AnimationBase(durationMs),
+    counterColor(color) {
+}
+
+/**
+ * @brief Set the counter color
+ * @param color New color for the counter
+ */
+void SimpleCounterAnimation::setColor(uint16_t color) {
+    counterColor = color;
 }
 
 /**
@@ -36,7 +48,7 @@ bool SimpleCounterAnimation::draw(unsigned long counter) {
     // Draw each digit
     for(uint8_t i = 0; i < COUNTER_DIGITS; i++) {
         int16_t digitX = startX + i * (digitWidth + digitSpacing);
-        drawDigit(counterStr[i], digitX, startY, textSize, COUNTER_COLOR);
+        drawDigit(counterStr[i], digitX, startY, textSize, counterColor);
     }
     
     // Animation only needs to refresh on first draw then stays static
@@ -46,4 +58,15 @@ bool SimpleCounterAnimation::draw(unsigned long counter) {
     }
     
     return false;
+}
+
+/**
+ * @brief Reset the animation timer and randomize color
+ */
+void SimpleCounterAnimation::reset() {
+    // Call the parent class reset to handle timer reset
+    AnimationBase::reset();
+    
+    // Randomize the counter color
+    counterColor = colorWheel(random(0, 256));
 }

@@ -9,7 +9,7 @@
 #define BAUD_RATE 115200
 
 // Application settings
-#define REFRESH_INTERVAL 500 // Display refresh interval in milliseconds
+#define REFRESH_INTERVAL 100 // Display refresh interval in milliseconds
 
 // Global animation manager
 extern AnimationManager animationManager;

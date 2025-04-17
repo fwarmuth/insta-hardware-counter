@@ -9,10 +9,11 @@
 class RandomPositionAnimation : public AnimationBase {
 public:
     /**
-     * @brief Constructor with configurable duration
+     * @brief Constructor with configurable duration and color
      * @param durationMs Animation duration in milliseconds
+     * @param color Color to use for the counter (default: COUNTER_COLOR)
      */
-    RandomPositionAnimation(unsigned long durationMs = 10000);
+    RandomPositionAnimation(unsigned long durationMs = 10000, uint16_t color = COUNTER_COLOR);
     
     /**
      * @brief Draw the counter at a random position
@@ -21,9 +22,21 @@ public:
      */
     virtual bool draw(unsigned long counter) override;
 
+    /**
+     * @brief Set the counter color
+     * @param color New color for the counter
+     */
+    void setColor(uint16_t color);
+    
+    /**
+     * @brief Reset the animation timer, position and randomize color
+     */
+    virtual void reset() override;
+
 private:
     int16_t posX;      // X position for the counter
     int16_t posY;      // Y position for the counter
+    uint16_t counterColor; // Color for the counter display
     
     /**
      * @brief Choose a new random position that ensures counter visibility

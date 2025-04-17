@@ -1,16 +1,27 @@
 #include "random_position_animation.h"
 #include "matrix_config.h"
 #include "counter.h"
+#include "color_utils.h"
 
 /**
- * @brief Constructor with configurable duration
+ * @brief Constructor with configurable duration and color
  * @param durationMs Animation duration in milliseconds
+ * @param color Color to use for the counter
  */
-RandomPositionAnimation::RandomPositionAnimation(unsigned long durationMs) : 
+RandomPositionAnimation::RandomPositionAnimation(unsigned long durationMs, uint16_t color) : 
     AnimationBase(durationMs),
     posX(0),
-    posY(0) {
+    posY(0),
+    counterColor(color) {
     // Initial position will be set on first draw
+}
+
+/**
+ * @brief Set the counter color
+ * @param color New color for the counter
+ */
+void RandomPositionAnimation::setColor(uint16_t color) {
+    counterColor = color;
 }
 
 /**
@@ -43,7 +54,7 @@ bool RandomPositionAnimation::draw(unsigned long counter) {
     // Draw each digit at the random position
     for(uint8_t i = 0; i < COUNTER_DIGITS; i++) {
         int16_t digitX = posX + i * (digitWidth + digitSpacing);
-        drawDigit(counterStr[i], digitX, posY, textSize, COUNTER_COLOR);
+        drawDigit(counterStr[i], digitX, posY, textSize, counterColor);
     }
     
     return false;
@@ -73,4 +84,17 @@ void RandomPositionAnimation::setRandomPosition(uint16_t counterWidth, uint16_t 
     }
     
     Serial.printf("Set random counter position to: (%d, %d)\n", posX, posY);
+}
+
+/**
+ * @brief Reset the animation timer, position and randomize color
+ */
+void RandomPositionAnimation::reset() {
+    // Call the parent class reset to handle timer reset
+    AnimationBase::reset();
+    
+    // Randomize the counter color
+    counterColor = colorWheel(random(0, 256));
+    
+    // Note: New random position will be set on the next draw() call when firstDraw is true
 }

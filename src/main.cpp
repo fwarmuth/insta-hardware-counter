@@ -86,7 +86,6 @@ void loop() {
  */
 void updateDisplay() {
     matrix->clearScreen();
-    
     // Use animation manager to draw the counter with the current animation style
     bool needsRefresh = animationManager.update(getCounterValue());
     if (needsRefresh) {

@@ -30,15 +30,15 @@ AnimationManager::~AnimationManager() {
 void AnimationManager::init() {
     // Create animation instances
     if (animations[STYLE_SIMPLE_COUNTER] == nullptr) {
-        animations[STYLE_SIMPLE_COUNTER] = new SimpleCounterAnimation(10000); // 10 seconds
+        animations[STYLE_SIMPLE_COUNTER] = new SimpleCounterAnimation(1000); // 10 seconds
     }
     
     if (animations[STYLE_RANDOM_POSITION] == nullptr) {
-        animations[STYLE_RANDOM_POSITION] = new RandomPositionAnimation(10000); // 10 seconds
+        animations[STYLE_RANDOM_POSITION] = new RandomPositionAnimation(1000); // 10 seconds
     }
     
     if (animations[STYLE_COLOR_TRANSITION] == nullptr) {
-        animations[STYLE_COLOR_TRANSITION] = new ColorTransitionAnimation(10000, 5000); // 10 seconds animation, 5 seconds color transition
+        animations[STYLE_COLOR_TRANSITION] = new ColorTransitionAnimation(20000, 20000); // 10 seconds animation, 5 seconds color transition
     }
     
     // Initialize with the first style
