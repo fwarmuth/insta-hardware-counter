@@ -110,6 +110,25 @@ class CredentialManager:
             self.last_rotation_time = current_time
             logger.info(f"Rotated to credential: {self.current_credential.email}")
             return True
+            
+    def force_rotate_to_next(self) -> bool:
+        """Force rotation to a different account, ensuring we don't select the same one"""
+        with self.lock:
+            if len(self.credentials) <= 1:
+                logger.warning("Only one credential available, cannot rotate to a different one")
+                return False
+                
+            # Explicitly exclude current credential when selecting next one
+            available_credentials = [c for c in self.credentials if c != self.current_credential]
+            if not available_credentials:
+                logger.warning("No other credentials available to rotate to")
+                return False
+                
+            # Select a different credential
+            self.current_credential = random.choice(available_credentials)
+            self.last_rotation_time = time.time()
+            logger.info(f"Forced rotation to different credential: {self.current_credential.email}")
+            return True
 
     def get_current_credentials(self) -> Tuple[str, str]:
         """Get the current username and password"""
@@ -203,15 +222,20 @@ def refresh_metrics_data(username: str) -> Tuple[Dict[str, Any], bool]:
     max_retries = min(3, len(credential_manager.credentials))
     
     while retry_count < max_retries:
-        # Get or create Instaloader instance, forcing new instance after a failed attempt
+        # Get or create Instaloader instance
         loader = get_loader(force_new=(retry_count > 0))
         
         if not loader:
             logger.error("Failed to create or authenticate Instaloader instance")
-            return {
-                "error": True,
-                "message": "Authentication failed, could not retrieve metrics"
-            }, False
+            # Force rotation to the next account for subsequent attempts
+            if retry_count < max_retries - 1:
+                credential_manager.force_rotate_to_next()
+                
+            retry_count += 1
+            continue
+        
+        current_account = loader.context.username
+        logger.info(f"Attempting to fetch metrics with account: {current_account} (attempt {retry_count + 1}/{max_retries})")
         
         try:
             metrics, record_id = get_instagram_metrics(
@@ -223,10 +247,13 @@ def refresh_metrics_data(username: str) -> Tuple[Dict[str, Any], bool]:
             )
             
             if not metrics:
-                logger.warning(f"Failed to get metrics for {username} with account {loader.context.username}")
+                logger.warning(f"Failed to get metrics for {username} with account {current_account}")
                 retry_count += 1
+                
+                # Force rotation to the next account for subsequent attempts
                 if retry_count < max_retries:
                     logger.info(f"Rotating to next account and retrying ({retry_count}/{max_retries})")
+                    credential_manager.force_rotate_to_next()
                 continue
                 
             # Success! Return data
@@ -241,10 +268,13 @@ def refresh_metrics_data(username: str) -> Tuple[Dict[str, Any], bool]:
             }, True
                 
         except Exception as e:
-            logger.warning(f"Error refreshing metrics with account {loader.context.username}: {str(e)}")
+            logger.warning(f"Error refreshing metrics with account {current_account}: {str(e)}")
             retry_count += 1
+            
+            # Force rotation to the next account for subsequent attempts
             if retry_count < max_retries:
                 logger.info(f"Rotating to next account and retrying ({retry_count}/{max_retries})")
+                credential_manager.force_rotate_to_next()
 
     # If we get here, all retries failed
     logger.error(f"All {max_retries} attempts failed to retrieve metrics")
