@@ -33,7 +33,7 @@ DEFAULT_USERNAME = "mein.kreis.pinneberg"
 CACHE_FRESHNESS_THRESHOLD = 15 * 60  # 15 minutes
 SESSION_DIR = os.path.join(parent_dir, 'data', 'sessions')
 CREDENTIALS_FILE = os.path.join(parent_dir, 'data', 'instagram_credentials.csv')
-DB_PATH = os.path.join(parent_dir, 'instagram_metrics.db')
+DB_PATH = os.path.join(parent_dir, 'data', 'instagram_metrics.db')
 
 # Initialize Flask app
 app = Flask(__name__)
