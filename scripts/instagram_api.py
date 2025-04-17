@@ -198,21 +198,26 @@ def get_latest_data(username: str = DEFAULT_USERNAME) -> Dict[str, Any]:
         if needs_refresh:
             logger.info(f"Refreshing Instagram metrics for {username}...")
             
-            # Get or create Instaloader instance
-            loader = get_loader()
+            # Track retries and set a maximum to prevent infinite loops
+            retry_count = 0
+            max_retries = min(3, len(_credential_manager.credentials) if _credential_manager else 1)
             
-            if not loader:
-                logger.error("Failed to create or authenticate Instaloader instance")
-                # Return existing data if available, otherwise error
-                if latest_metrics:
-                    needs_refresh = False
-                else:
-                    return {
-                        "error": True,
-                        "message": "Authentication failed, could not retrieve metrics"
-                    }
-            
-            if needs_refresh and loader:
+            while retry_count < max_retries:
+                # Get or create Instaloader instance
+                loader = get_loader(force_new=(retry_count > 0))
+                
+                if not loader:
+                    logger.error("Failed to create or authenticate Instaloader instance")
+                    # Return existing data if available, otherwise error
+                    if latest_metrics:
+                        needs_refresh = False
+                        break
+                    else:
+                        return {
+                            "error": True,
+                            "message": "Authentication failed, could not retrieve metrics"
+                        }
+                
                 try:
                     metrics, record_id = get_instagram_metrics(
                         username=username, 
@@ -228,20 +233,32 @@ def get_latest_data(username: str = DEFAULT_USERNAME) -> Dict[str, Any]:
                         recent_posts_count = None  # Not available yet
                         collection_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         logger.info(f"Successfully refreshed metrics with record ID: {record_id}")
+                        break  # Success! Exit the retry loop
                     else:
-                        logger.error(f"Failed to refresh metrics for {username}")
+                        logger.warning(f"Failed to get metrics for {username} with account {loader.context.username}")
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            logger.info(f"Rotating to next account and retrying ({retry_count}/{max_retries})")
+                        else:
+                            logger.error(f"All {max_retries} attempts failed to retrieve metrics")
+                            if not latest_metrics:
+                                return {
+                                    "error": True,
+                                    "message": f"Could not retrieve metrics for {username} after {max_retries} attempts"
+                                }
+                except Exception as e:
+                    logger.warning(f"Error refreshing metrics with account {loader.context.username}: {str(e)}")
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        logger.info(f"Rotating to next account and retrying ({retry_count}/{max_retries})")
+                    else:
+                        logger.error(f"All {max_retries} attempts failed: {str(e)}")
                         if not latest_metrics:
                             return {
                                 "error": True,
-                                "message": f"Could not retrieve metrics for {username}"
+                                "message": f"Error retrieving metrics after {max_retries} attempts: {str(e)}"
                             }
-                except Exception as e:
-                    logger.error(f"Error refreshing metrics: {str(e)}")
-                    if not latest_metrics:
-                        return {
-                            "error": True,
-                            "message": f"Error retrieving metrics: {str(e)}"
-                        }
+                        break
         
         # Prepare and return the response
         result = {
