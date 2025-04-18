@@ -14,8 +14,11 @@ from db.instagram_db import InstagramDatabase
 
 app = Flask(__name__)
 
-# Initialize the Instagram wrapper with credentials from CSV
+# Instagram API Configuration
 CREDENTIALS_FILE = os.path.join(current_dir, "instagram_credentials.csv")
+MAX_AGE_HOURS = 0.25  # Maximum age of cached data in hours before refreshing
+
+# Initialize the Instagram wrapper with credentials from CSV
 insta_api = InstaWrapper(csv_file=CREDENTIALS_FILE)
 
 # Define the database path
@@ -50,19 +53,19 @@ def get_instagram_metrics():
         # Try to get the latest metrics from the database first
         latest_metrics = db.get_latest_metrics(username)
         
-        # If we have recent data (less than 1 hour old), use it
+        # If we have recent data (less than MAX_AGE_HOURS old), use it
         if latest_metrics:
             followers_count, posts_count, recent_posts_count, collection_date = latest_metrics
             last_updated = collection_date
             
-            # Check if data is older than 1 hour and needs refresh
+            # Check if data is older than configured hours and needs refresh
             last_update_time = datetime.strptime(collection_date, '%Y-%m-%d %H:%M:%S')
             time_diff = (datetime.now() - last_update_time).total_seconds() / 3600
             
-            if time_diff > 1:
-                # Data is older than 1 hour, fetch new data
+            if time_diff > MAX_AGE_HOURS:
+                # Data is older than MAX_AGE_HOURS, fetch new data
                 refresh_data = True
-                app.logger.info(f"Data is {time_diff:.2f} hours old, refreshing...")
+                app.logger.info(f"Data is {time_diff:.2f} hours old (max: {MAX_AGE_HOURS}h), refreshing...")
             else:
                 refresh_data = False
                 app.logger.info(f"Using cached data, last updated at {last_updated}")
