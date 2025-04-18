@@ -20,4 +20,4 @@ ENV INSTAGRAM_PASSWORD=""
 EXPOSE 5000
 
 # Run the API server
-CMD ["python", "scripts/instagram_api.py"]
+CMD ["python", "scripts/instagram_api_server.py"]
