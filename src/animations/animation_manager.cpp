@@ -25,26 +25,87 @@ AnimationManager::~AnimationManager() {
 }
 
 /**
+ * @brief Check if an animation is enabled in configuration
+ * @param style The animation style to check
+ * @return True if the animation is enabled
+ */
+bool AnimationManager::isAnimationEnabled(AnimationStyle style) {
+    // This implementation is kept for backward compatibility but isn't used
+    // by the ANIM_ENABLED macro anymore
+    switch (style) {
+        case STYLE_SIMPLE_COUNTER:
+            return ENABLE_SIMPLE_COUNTER;
+        case STYLE_RANDOM_POSITION:
+            return ENABLE_RANDOM_POSITION;
+        case STYLE_COLOR_TRANSITION:
+            return ENABLE_COLOR_TRANSITION;
+        case STYLE_BOUNCING_COUNTER:
+            return ENABLE_BOUNCING_COUNTER;
+        default:
+            return false;
+    }
+}
+
+/**
  * @brief Initialize the animation manager
  */
 void AnimationManager::init() {
-    // Create animation instances
-    if (animations[STYLE_SIMPLE_COUNTER] == nullptr) {
-        animations[STYLE_SIMPLE_COUNTER] = new SimpleCounterAnimation(1000); // 10 seconds
+    // Create animation instances only for enabled animations with duration from config
+    if (ANIM_ENABLED(STYLE_SIMPLE_COUNTER) && animations[STYLE_SIMPLE_COUNTER] == nullptr) {
+        animations[STYLE_SIMPLE_COUNTER] = new SimpleCounterAnimation(DURATION_SIMPLE_COUNTER);
     }
     
-    if (animations[STYLE_RANDOM_POSITION] == nullptr) {
-        animations[STYLE_RANDOM_POSITION] = new RandomPositionAnimation(1000); // 10 seconds
+    if (ANIM_ENABLED(STYLE_RANDOM_POSITION) && animations[STYLE_RANDOM_POSITION] == nullptr) {
+        animations[STYLE_RANDOM_POSITION] = new RandomPositionAnimation(DURATION_RANDOM_POSITION);
     }
     
-    if (animations[STYLE_COLOR_TRANSITION] == nullptr) {
-        animations[STYLE_COLOR_TRANSITION] = new ColorTransitionAnimation(20000, 20000); // 10 seconds animation, 5 seconds color transition
+    if (ANIM_ENABLED(STYLE_COLOR_TRANSITION) && animations[STYLE_COLOR_TRANSITION] == nullptr) {
+        animations[STYLE_COLOR_TRANSITION] = new ColorTransitionAnimation(DURATION_COLOR_TRANSITION, DURATION_COLOR_TRANSITION);
     }
     
-    // Initialize with the first style
-    currentStyle = STYLE_SIMPLE_COUNTER;
+    if (ANIM_ENABLED(STYLE_BOUNCING_COUNTER) && animations[STYLE_BOUNCING_COUNTER] == nullptr) {
+        animations[STYLE_BOUNCING_COUNTER] = new BouncingCounterAnimation(DURATION_BOUNCING_COUNTER);
+    }
     
-    Serial.println("Animation manager initialized");
+    // Initialize with the first enabled style
+    bool foundEnabled = false;
+    for (int i = 0; i < STYLE_COUNT; i++) {
+        if (ANIM_ENABLED(static_cast<AnimationStyle>(i)) && animations[i] != nullptr) {
+            currentStyle = static_cast<AnimationStyle>(i);
+            foundEnabled = true;
+            break;
+        }
+    }
+    
+    if (!foundEnabled) {
+        Serial.println("Warning: No animations are enabled!");
+    } else {
+        Serial.println("Animation manager initialized");
+    }
+}
+
+/**
+ * @brief Find the next enabled animation style
+ * @param startStyle The style to start searching from
+ * @return The next enabled animation style
+ */
+AnimationStyle AnimationManager::findNextEnabledAnimation(AnimationStyle startStyle) {
+    AnimationStyle style = startStyle;
+    
+    // Loop through all styles (max STYLE_COUNT times) to find an enabled one
+    for (int i = 0; i < STYLE_COUNT; i++) {
+        // Move to the next style (wrapping around if necessary)
+        style = static_cast<AnimationStyle>((style + 1) % STYLE_COUNT);
+        
+        // Return this style if it's enabled and initialized
+        if (ANIM_ENABLED(style) && animations[style] != nullptr) {
+            return style;
+        }
+    }
+    
+    // If we got here, no enabled animations were found
+    // Return the original style as fallback
+    return startStyle;
 }
 
 /**
@@ -80,6 +141,11 @@ void AnimationManager::setAnimationStyle(AnimationStyle style) {
         return;
     }
     
+    if (!ANIM_ENABLED(style)) {
+        Serial.printf("Animation style %d is disabled in configuration\n", style);
+        return;
+    }
+    
     if (animations[style] == nullptr) {
         Serial.printf("Animation style %d not initialized\n", style);
         return;
@@ -110,6 +176,11 @@ void AnimationManager::setAnimationDuration(AnimationStyle style, unsigned long 
         return;
     }
     
+    if (!ANIM_ENABLED(style)) {
+        Serial.printf("Animation style %d is disabled in configuration\n", style);
+        return;
+    }
+    
     if (animations[style] == nullptr) {
         Serial.printf("Animation style %d not initialized\n", style);
         return;
@@ -123,9 +194,15 @@ void AnimationManager::setAnimationDuration(AnimationStyle style, unsigned long 
  * @brief Switch to the next animation style
  */
 void AnimationManager::nextAnimation() {
-    // Cycle to the next available style
-    AnimationStyle nextStyle = static_cast<AnimationStyle>((currentStyle + 1) % STYLE_COUNT);
+    // Find the next enabled animation
+    AnimationStyle nextStyle = findNextEnabledAnimation(currentStyle);
     
-    // Set the next style
-    setAnimationStyle(nextStyle);
+    // If we couldn't find another enabled animation, just stay on the current one
+    if (nextStyle == currentStyle) {
+        animations[currentStyle]->reset(); // Reset the current animation
+        Serial.println("No other enabled animations found, resetting current");
+    } else {
+        // Set the next style
+        setAnimationStyle(nextStyle);
+    }
 }

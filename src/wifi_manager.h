@@ -23,7 +23,7 @@
 
 // OTA settings
 #define OTA_HOSTNAME "insta_counter"
-#define OTA_PASSWORD "your_ota_password"       // Make sure this matches platformio.ini upload_flags auth
+#define OTA_PASSWORD "123456789"       // Make sure this matches platformio.ini upload_flags auth
 
 /**
  * @brief Lists all files in SPIFFS root directory
