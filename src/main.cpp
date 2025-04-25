@@ -65,11 +65,21 @@ void loop() {
         // Only check WiFi if captive portal is not active
         checkAndMaintainWiFi();
         
-        // Update counter data if needed - only if WiFi is connected
+        // Update counter data using non-blocking approach - only if WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
-            bool counterUpdated = updateCounter();
-            if (counterUpdated) {
-                Serial.println("Counter updated");
+            // First, check if we need to start a new request
+            bool fetchStarted = checkCounterUpdateTime();
+            if (fetchStarted) {
+                Serial.println("Counter update initiated");
+            }
+            
+            // Then, check if any in-progress request has completed
+            APIRequestState state = getAPIRequestState();
+            if (state == API_REQUEST_COMPLETE) {
+                bool processed = processAsyncCounterFetch();
+                if (processed) {
+                    Serial.println("Counter updated");
+                }
             }
         }
     }

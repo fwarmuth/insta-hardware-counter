@@ -7,6 +7,13 @@
 #define COUNTER_UPDATE_INTERVAL 10000  // 10 seconds in milliseconds
 #define COUNTER_DIGITS 5               // Number of digits to display
 
+// API request state enumeration
+enum APIRequestState {
+    API_IDLE,           // No active request
+    API_REQUEST_PENDING, // Request has been initiated
+    API_REQUEST_COMPLETE // Request has been completed
+};
+
 // Function declarations
 /**
  * @brief Initialize the counter
@@ -14,7 +21,26 @@
 void initCounter();
 
 /**
- * @brief Fetch follower count from Instagram API
+ * @brief Start an asynchronous fetch of follower count from Instagram API
+ * Does not wait for completion
+ * @return True if request was initiated successfully
+ */
+bool startAsyncCounterFetch();
+
+/**
+ * @brief Check if an async fetch is in progress
+ * @return Current state of the API request
+ */
+APIRequestState getAPIRequestState();
+
+/**
+ * @brief Process the results of the async fetch if complete
+ * @return True if results were processed, false if request not complete
+ */
+bool processAsyncCounterFetch();
+
+/**
+ * @brief Fetch follower count from Instagram API (blocking)
  * @return True if successful
  */
 bool fetchCounterFromAPI();
@@ -26,10 +52,10 @@ bool fetchCounterFromAPI();
 void logHttpError(int httpResponseCode);
 
 /**
- * @brief Update the counter if enough time has passed
- * @return True if counter was updated
+ * @brief Check if it's time to update the counter and start async request if needed
+ * @return True if a new fetch was initiated
  */
-bool updateCounter();
+bool checkCounterUpdateTime();
 
 /**
  * @brief Draw a single digit with the specified color

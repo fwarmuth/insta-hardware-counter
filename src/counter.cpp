@@ -12,6 +12,11 @@ static unsigned long lastCounterUpdate = 0;
 static const char* API_ENDPOINT = "http://172.16.10.190:5000/api/instagram/metrics";
 static bool lastRequestSuccessful = false; // Track if the last API request was successful
 
+// Async API variables
+static HTTPClient asyncHttp;
+static APIRequestState apiRequestState = API_IDLE;
+static unsigned long apiRequestStartTime = 0;
+
 // Counter display color
 static const uint16_t COUNTER_COLOR = 0x4A1F; // Purple-blue color in RGB565 format
 
@@ -290,4 +295,165 @@ void displayIcon(const uint8_t* iconData, uint16_t primaryColor, uint16_t second
             }
         }
     }
+}
+
+/**
+ * @brief Start an asynchronous fetch of follower count from Instagram API
+ * Does not wait for completion
+ * @return True if request was initiated successfully
+ */
+bool startAsyncCounterFetch() {
+    // Only start a new request if we're not already processing one
+    if (apiRequestState != API_IDLE) {
+        return false;
+    }
+    
+    // Check if WiFi is connected
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("Starting async follower count fetch...");
+        
+        // Set HTTP request timeout
+        asyncHttp.setTimeout(45000);
+        
+        // Start HTTP connection
+        asyncHttp.begin(API_ENDPOINT);
+        
+        // Begin the async request (non-blocking)
+        asyncHttp.sendRequest("GET");
+        
+        // Update state and timestamp
+        apiRequestState = API_REQUEST_PENDING;
+        apiRequestStartTime = millis();
+        Serial.println("Async API request started");
+        return true;
+    } else {
+        Serial.println("WiFi not connected, can't start async counter fetch");
+        return false;
+    }
+}
+
+/**
+ * @brief Check if an async fetch is in progress
+ * @return Current state of the API request
+ */
+APIRequestState getAPIRequestState() {
+    // If we have a pending request, check if it has completed
+    if (apiRequestState == API_REQUEST_PENDING) {
+        // Check if the request has completed
+        // Since HTTPClient doesn't have built-in async completion detection,
+        // we need to poll for readyState or connection availability
+        int connectionState = asyncHttp.connected();
+        if (connectionState == false) {
+            // Connection closed, request is likely complete
+            Serial.println("Async API request completed");
+            apiRequestState = API_REQUEST_COMPLETE;
+        }
+        // Timeout check - abandon request if it takes too long
+        else if (millis() - apiRequestStartTime > 60000) {  // 60 seconds timeout
+            Serial.println("Async API request timed out");
+            asyncHttp.end();
+            apiRequestState = API_IDLE;
+        }
+    }
+    
+    return apiRequestState;
+}
+
+/**
+ * @brief Process the results of the async fetch if complete
+ * @return True if results were processed, false if request not complete
+ */
+bool processAsyncCounterFetch() {
+    // Only process if we have a completed request
+    if (apiRequestState != API_REQUEST_COMPLETE) {
+        return false;
+    }
+    
+    bool success = false;
+    
+    // Get the response code - use a direct method because getResponse doesn't exist
+    int httpResponseCode = asyncHttp.GET(); // This returns the response code for the current connection
+    Serial.print("HTTP Response Code: ");
+    Serial.println(httpResponseCode);
+    
+    // Handle error codes
+    if (httpResponseCode < 0) {
+        logHttpError(httpResponseCode);
+    }
+    
+    if (httpResponseCode == 200) {
+        // Successful response
+        String payload = asyncHttp.getString();
+        Serial.println("API Response: " + payload);
+        
+        // Parse JSON response
+        DynamicJsonDocument doc(1024);
+        DeserializationError error = deserializeJson(doc, payload);
+        
+        if (!error) {
+            // Store the previous counter value
+            prevCounter = counter;
+            
+            // Extract follower count
+            unsigned long followers = doc["followers_count"];
+            counter = followers;
+            
+            String username = doc["username"].as<String>();
+            String lastUpdated = doc["last_updated"].as<String>();
+            
+            Serial.printf("Updated follower count for %s: %lu (Last updated: %s)\n", 
+                username.c_str(), counter, lastUpdated.c_str());
+                
+            success = true;
+            lastRequestSuccessful = true;
+        } else {
+            Serial.print("JSON parsing error: ");
+            Serial.println(error.c_str());
+            lastRequestSuccessful = false;
+        }
+    } else {
+        Serial.print("HTTP Error: ");
+        Serial.println(httpResponseCode);
+        lastRequestSuccessful = false;
+    }
+    
+    // Clean up and update state
+    asyncHttp.end();
+    apiRequestState = API_IDLE;
+    Serial.println("Async HTTP connection closed");
+    
+    // Update the status indicator with WiFi connected and the API request status
+    updateStatusIndicator(true, lastRequestSuccessful);
+    
+    return success;
+}
+
+/**
+ * @brief Check if it's time to update the counter and start async request if needed
+ * @return True if a new fetch was initiated
+ */
+bool checkCounterUpdateTime() {
+    unsigned long currentMillis = millis();
+    
+    // Check if it's time to update the counter and we're not already fetching
+    if ((currentMillis - lastCounterUpdate >= COUNTER_UPDATE_INTERVAL) && 
+        (apiRequestState == API_IDLE)) {
+        
+        // Save the last update time
+        lastCounterUpdate = currentMillis;
+        
+        // Start async fetch
+        bool started = startAsyncCounterFetch();
+        
+        // Debug info
+        if (started) {
+            Serial.println("Started async counter update");
+        } else {
+            Serial.println("Failed to start async counter update");
+        }
+        
+        return started;
+    }
+    
+    return false;
 }
