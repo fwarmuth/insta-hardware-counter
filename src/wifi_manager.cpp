@@ -1,5 +1,16 @@
 #include "wifi_manager.h"
 
+// Global variables for captive portal functionality
+WebServer webServer(WEB_SERVER_PORT);
+DNSServer dnsServer;
+bool captivePortalActive = false;
+unsigned long portalStartTime = 0;
+
+// Forward declarations of captive portal handlers
+void handleRoot();
+void handleSave();
+void handleNotFound();
+
 /**
  * @brief Lists all files in SPIFFS root directory
  */
@@ -350,4 +361,270 @@ void initOTA() {
  */
 void handleOTA() {
     ArduinoOTA.handle();
+}
+
+/**
+ * @brief Writes new WiFi credentials to the config file
+ */
+bool writeWiFiCredentials(const char* ssid, const char* password) {
+    if (!SPIFFS.begin(true)) {
+        Serial.println("Failed to mount SPIFFS");
+        return false;
+    }
+    
+    File configFile = SPIFFS.open(WIFI_CONFIG_FILE, "w");
+    if (!configFile) {
+        Serial.println("Failed to open WiFi config file for writing");
+        return false;
+    }
+    
+    // Write in the format SSID:PASSWORD
+    configFile.printf("%s:%s\n", ssid, password);
+    configFile.close();
+    
+    Serial.println("WiFi credentials written to config file");
+    return true;
+}
+
+/**
+ * @brief Start the captive portal for WiFi configuration
+ */
+void startCaptivePortal() {
+    // Stop any existing WiFi connection
+    WiFi.disconnect();
+    delay(100);
+    
+    // Set up access point
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(IPAddress(AP_IP_ADDRESS), IPAddress(AP_IP_ADDRESS), IPAddress(255, 255, 255, 0));
+    
+    // Start the access point with SSID and password
+    if (WiFi.softAP(AP_SSID, AP_PASSWORD)) {
+        Serial.println("Access Point started");
+        Serial.printf("SSID: %s\n", AP_SSID);
+        Serial.printf("Password: %s\n", AP_PASSWORD);
+        Serial.printf("AP IP address: %s\n", WiFi.softAPIP().toString().c_str());
+    } else {
+        Serial.println("Failed to start Access Point");
+        return;
+    }
+    
+    // Start DNS server for captive portal
+    dnsServer.start(DNS_PORT, "*", IPAddress(AP_IP_ADDRESS));
+    
+    // Set up web server routes
+    webServer.on("/", HTTP_GET, handleRoot);
+    webServer.on("/save", HTTP_POST, handleSave);
+    webServer.onNotFound(handleNotFound);
+    
+    // Start web server
+    webServer.begin();
+    Serial.println("Captive portal started");
+    
+    // Set the start time for timeout tracking
+    portalStartTime = millis();
+    captivePortalActive = true;
+
+    // Visual indicator that we're in AP mode
+    updateStatusIndicator(false, false);
+}
+
+/**
+ * @brief Handle captive portal in the main loop
+ * @return True if portal is still active, false if it was closed
+ */
+bool handleCaptivePortal() {
+    if (!captivePortalActive) {
+        return false;
+    }
+    
+    // Check for portal timeout
+    if (millis() - portalStartTime > PORTAL_TIMEOUT_MS) {
+        Serial.println("Captive portal timeout reached");
+        captivePortalActive = false;
+        
+        // Try to connect with any existing credentials
+        if (connectToWiFi()) {
+            Serial.println("Connected to WiFi after portal timeout");
+        } else {
+            Serial.println("No WiFi connection after portal timeout");
+        }
+        
+        return false;
+    }
+    
+    // Process DNS and web server requests
+    dnsServer.processNextRequest();
+    webServer.handleClient();
+    
+    return true;
+}
+
+/**
+ * @brief Handle root page of captive portal
+ */
+void handleRoot() {
+    // Read existing WiFi credentials if available
+    char ssid[32] = "";
+    char password[64] = "";
+    bool hasExistingConfig = readWiFiCredentials(ssid, password);
+    
+    // Create the configuration web page
+    String html = "<!DOCTYPE html><html><head>"
+                  "<title>ESP WiFi Setup</title>"
+                  "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                  "<style>"
+                  "body{font-family:Arial,sans-serif;margin:0;padding:20px;background:#f5f5f5;color:#333;line-height:1.6;}"
+                  "h1{color:#0066cc;text-align:center;margin-bottom:30px;}"
+                  ".container{max-width:400px;margin:0 auto;background:white;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}"
+                  ".form-group{margin-bottom:15px;}"
+                  "label{display:block;margin-bottom:5px;font-weight:bold;}"
+                  "input[type=text],input[type=password]{width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;}"
+                  "button{background:#0066cc;color:white;border:none;padding:12px;width:100%;border-radius:4px;cursor:pointer;font-size:16px;}"
+                  "button:hover{background:#0055aa;}"
+                  ".footer{text-align:center;margin-top:20px;font-size:12px;color:#666;}"
+                  "</style>"
+                  "</head><body>"
+                  "<div class='container'>"
+                  "<h1>Instagram Counter WiFi Setup</h1>"
+                  "<form method='post' action='/save'>"
+                  "<div class='form-group'>"
+                  "<label for='ssid'>WiFi Network Name (SSID):</label>"
+                  "<input type='text' id='ssid' name='ssid' value='";
+    
+    // Add existing SSID if available
+    html += hasExistingConfig ? ssid : "";
+    
+    html += "' required>"
+            "</div>"
+            "<div class='form-group'>"
+            "<label for='password'>WiFi Password:</label>"
+            "<input type='password' id='password' name='password' value='";
+    
+    // Add existing password if available
+    html += hasExistingConfig ? password : "";
+    
+    html += "' required>"
+            "</div>"
+            "<button type='submit'>Save Configuration</button>"
+            "</form>"
+            "<div class='footer'>After saving, the device will attempt to connect to your WiFi network.</div>"
+            "</div>"
+            "</body></html>";
+    
+    webServer.send(200, "text/html", html);
+}
+
+/**
+ * @brief Handle form submission with new WiFi credentials
+ */
+void handleSave() {
+    String newSsid = webServer.arg("ssid");
+    String newPassword = webServer.arg("password");
+    
+    // Validate inputs
+    if (newSsid.length() == 0) {
+        webServer.send(400, "text/plain", "SSID cannot be empty");
+        return;
+    }
+    
+    Serial.println("Received new WiFi credentials:");
+    Serial.printf("SSID: %s\n", newSsid.c_str());
+    Serial.println("Password: [hidden]");
+    
+    // Convert String to char arrays
+    char ssidBuffer[32] = {0};
+    char passwordBuffer[64] = {0};
+    
+    copyToBuffer(ssidBuffer, newSsid, 32);
+    copyToBuffer(passwordBuffer, newPassword, 64);
+    
+    // Save to config file
+    bool saved = writeWiFiCredentials(ssidBuffer, passwordBuffer);
+    
+    // Send response
+    String html = "<!DOCTYPE html><html><head>"
+                  "<title>WiFi Configuration</title>"
+                  "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                  "<style>"
+                  "body{font-family:Arial,sans-serif;margin:0;padding:20px;background:#f5f5f5;color:#333;line-height:1.6;}"
+                  ".container{max-width:400px;margin:0 auto;background:white;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;}"
+                  "h1{color:";
+    
+    // Change title color based on result
+    html += saved ? "#4CAF50" : "#f44336";
+    
+    html += ";}"
+            "</style>"
+            "</head><body>"
+            "<div class='container'>"
+            "<h1>";
+            
+    if (saved) {
+        html += "Configuration Saved!";
+    } else {
+        html += "Error Saving Configuration";
+    }
+    
+    html += "</h1>"
+            "<p>";
+            
+    if (saved) {
+        html += "WiFi credentials have been saved. The device will now attempt to connect to your network.";
+    } else {
+        html += "There was a problem saving your WiFi credentials. Please try again.";
+    }
+    
+    html += "</p>"
+            "</div>"
+            "</body></html>";
+    
+    webServer.send(200, "text/html", html);
+    
+    // If saved successfully, try to connect
+    if (saved) {
+        // Wait a bit to make sure the client gets the response
+        delay(2000);
+        
+        // Stop captive portal
+        captivePortalActive = false;
+        webServer.stop();
+        WiFi.softAPdisconnect(true);
+        dnsServer.stop();
+        
+        // Try to connect with new credentials
+        if (attemptWiFiConnection(ssidBuffer, passwordBuffer)) {
+            Serial.println("Successfully connected with new credentials");
+        } else {
+            Serial.println("Failed to connect with new credentials");
+            // Restart captive portal if connection fails
+            startCaptivePortal();
+        }
+    }
+}
+
+/**
+ * @brief Handle all undefined URLs in the captive portal
+ * 
+ * This is needed to redirect all requests to the configuration page
+ */
+void handleNotFound() {
+    // For captive portal, redirect all requests to the root
+    webServer.sendHeader("Location", "/", true);
+    webServer.send(302, "text/plain", "");
+}
+
+/**
+ * @brief Initialize WiFi with fallback to captive portal
+ */
+void initWiFiWithCaptivePortal() {
+    // First try to connect with saved credentials
+    if (connectToWiFi()) {
+        Serial.println("Connected to WiFi with saved credentials");
+        initOTA();
+    } else {
+        // If connection fails, start the captive portal
+        Serial.println("WiFi connection failed. Starting captive portal.");
+        startCaptivePortal();
+    }
 }

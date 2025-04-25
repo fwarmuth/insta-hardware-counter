@@ -25,11 +25,11 @@ void setup() {
     
     initMatrix();
     
-    // Initialize WiFi connection
-    initWiFi();
+    // Initialize WiFi connection with fallback to captive portal
+    initWiFiWithCaptivePortal();
     
     // Initialize OTA after WiFi is connected
-    initOTA();
+    // OTA is now initialized in initWiFiWithCaptivePortal() if WiFi connects successfully
     
     initCounter();
     
@@ -65,13 +65,18 @@ void loop() {
     // Handle OTA updates
     handleOTA();
     
-    // Handle WiFi connection
-    checkAndMaintainWiFi();
-    
-    // Update counter data if needed
-    bool counterUpdated = updateCounter();
-    if (counterUpdated) {
-        Serial.println("Counter updated");
+    // Handle captive portal if active, otherwise maintain WiFi connection
+    if (!handleCaptivePortal()) {
+        // Only check WiFi if captive portal is not active
+        checkAndMaintainWiFi();
+        
+        // Update counter data if needed - only if WiFi is connected
+        if (WiFi.status() == WL_CONNECTED) {
+            bool counterUpdated = updateCounter();
+            if (counterUpdated) {
+                Serial.println("Counter updated");
+            }
+        }
     }
     
     // Refresh display
