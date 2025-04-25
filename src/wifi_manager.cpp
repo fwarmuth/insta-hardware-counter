@@ -56,6 +56,45 @@ void logCredentials(const char* ssid, const char* password) {
 }
 
 /**
+ * @brief Attempts to connect to WiFi using given credentials
+ * 
+ * @param ssid WiFi network SSID
+ * @param password WiFi network password
+ * @return True if connection successful
+ */
+bool attemptWiFiConnection(const char* ssid, const char* password) {
+    Serial.printf("Attempting to connect to WiFi network: %s\n", ssid);
+    updateStatusIndicator(false, false);
+    
+    WiFi.disconnect();
+    WiFi.mode(WIFI_STA);
+    // Set the hostname before connecting
+    WiFi.setHostname(OTA_HOSTNAME);
+    WiFi.begin(ssid, password);
+    
+    unsigned long connectionStartTime = millis();
+    
+    // Wait for connection or timeout
+    while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - connectionStartTime > WIFI_CONNECT_TIMEOUT) {
+            Serial.printf("Failed to connect to %s, timeout reached\n", ssid);
+            return false;
+        }
+        
+        delay(500);
+        Serial.print(".");
+    }
+    
+    // Connection successful
+    Serial.println();
+    Serial.printf("Connected to WiFi network: %s\n", ssid);
+    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("Signal strength (RSSI): %d dBm\n", WiFi.RSSI());
+    
+    return true;
+}
+
+/**
  * @brief Reads WiFi credentials from config file in SPIFFS
  * 
  * @param ssid Buffer to store the SSID
@@ -77,18 +116,55 @@ bool readWiFiCredentials(char* ssid, char* password) {
         return false;
     }
     
-    // Read credentials
-    String ssidString = configFile.readStringUntil('\n');
-    String passwordString = configFile.readStringUntil('\n');
+    // Check for legacy format (SSID on first line, password on second)
+    String firstLine = configFile.readStringUntil('\n');
+    firstLine.trim();
     
-    ssidString.trim();
-    passwordString.trim();
+    if (firstLine.indexOf(':') == -1) {
+        // Legacy format detected
+        String secondLine = configFile.readStringUntil('\n');
+        secondLine.trim();
+        configFile.close();
+        
+        if (firstLine.isEmpty() || secondLine.isEmpty()) {
+            Serial.println("WiFi config file format is invalid");
+            return false;
+        }
+        
+        // Safe copy to buffers
+        if (!copyToBuffer(ssid, firstLine, 32) || 
+            !copyToBuffer(password, secondLine, 64)) {
+            return false;
+        }
+        
+        // Log success
+        logCredentials(ssid, password);
+        return true;
+    }
+    
+    // New format with credentials on each line as SSID:PASSWORD
+    // Reset file position
+    configFile.seek(0);
+    
+    // Read first entry
+    String line = configFile.readStringUntil('\n');
     configFile.close();
     
-    if (ssidString.isEmpty() || passwordString.isEmpty()) {
-        Serial.println("WiFi config file format is invalid");
+    line.trim();
+    if (line.isEmpty()) {
+        Serial.println("WiFi config file is empty");
         return false;
     }
+    
+    // Extract SSID and password
+    int delimiterPos = line.indexOf(':');
+    if (delimiterPos == -1) {
+        Serial.println("Invalid format in WiFi config file (expected SSID:PASSWORD)");
+        return false;
+    }
+    
+    String ssidString = line.substring(0, delimiterPos);
+    String passwordString = line.substring(delimiterPos + 1);
     
     // Safe copy to buffers
     if (!copyToBuffer(ssid, ssidString, 32) || 
@@ -107,48 +183,81 @@ bool readWiFiCredentials(char* ssid, char* password) {
  * @return True if connection was successful
  */
 bool connectToWiFi() {
-    char ssid[32] = "";
-    char password[64] = "";
-    
-    if (!readWiFiCredentials(ssid, password)) {
-        Serial.println("Failed to read WiFi credentials from file");
+    if (!SPIFFS.begin(true)) {
+        Serial.println("Failed to mount SPIFFS");
         updateStatusIndicator(false, false);
         return false;
     }
     
-    Serial.printf("Connecting to WiFi network: %s\n", ssid);
-    updateStatusIndicator(false, false);
+    File configFile = SPIFFS.open(WIFI_CONFIG_FILE, "r");
     
-    WiFi.mode(WIFI_STA);
-    // Set the hostname before connecting
-    WiFi.setHostname(OTA_HOSTNAME);
-    Serial.printf("Device hostname set to: %s\n", OTA_HOSTNAME);
-    WiFi.begin(ssid, password);
-    
-    unsigned long connectionStartTime = millis();
-    
-    // Wait for connection or timeout
-    while (WiFi.status() != WL_CONNECTED) {
-        if (millis() - connectionStartTime > WIFI_CONNECT_TIMEOUT) {
-            Serial.println("WiFi connection failed, timeout reached");
-            updateStatusIndicator(false, false);
-            return false;
-        }
-        
-        delay(500);
-        Serial.print(".");
+    if (!configFile) {
+        Serial.println("Failed to open WiFi config file");
+        // List files for debugging
+        printSpiffsFiles();
+        updateStatusIndicator(false, false);
+        return false;
     }
     
-    // Connection successful
-    Serial.println();
-    Serial.println("WiFi connected successfully");
-    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
-    Serial.printf("Signal strength (RSSI): %d dBm\n", WiFi.RSSI());
+    bool connected = false;
+    bool legacyFormat = false;
+    char ssid[32];
+    char password[64];
     
-    // Update status - WiFi connected, but counter status stays the same
+    // Check first line to detect format
+    String firstLine = configFile.readStringUntil('\n');
+    firstLine.trim();
+    
+    if (firstLine.indexOf(':') == -1) {
+        // Legacy format (SSID on first line, password on second)
+        legacyFormat = true;
+        String secondLine = configFile.readStringUntil('\n');
+        secondLine.trim();
+        
+        if (!firstLine.isEmpty() && !secondLine.isEmpty()) {
+            copyToBuffer(ssid, firstLine, 32);
+            copyToBuffer(password, secondLine, 64);
+            
+            connected = attemptWiFiConnection(ssid, password);
+        }
+    } else {
+        // Reset file position to start
+        configFile.seek(0);
+        
+        // Try each network configuration until successful
+        while (!connected && configFile.available()) {
+            String line = configFile.readStringUntil('\n');
+            line.trim();
+            
+            if (line.isEmpty()) continue;
+            
+            int delimiterPos = line.indexOf(':');
+            if (delimiterPos == -1) {
+                Serial.println("Invalid format in WiFi config (expected SSID:PASSWORD)");
+                continue;
+            }
+            
+            String ssidString = line.substring(0, delimiterPos);
+            String passwordString = line.substring(delimiterPos + 1);
+            
+            copyToBuffer(ssid, ssidString, 32);
+            copyToBuffer(password, passwordString, 64);
+            
+            // Log the network we're trying
+            Serial.printf("Trying WiFi configuration: %s\n", ssid);
+            
+            // Attempt connection with this configuration
+            connected = attemptWiFiConnection(ssid, password);
+        }
+    }
+    
+    configFile.close();
+    
+    // Update status - WiFi connected (or not), but counter status stays the same
     extern bool isLastRequestSuccessful();
-    updateStatusIndicator(true, isLastRequestSuccessful());
-    return true;
+    updateStatusIndicator(connected, isLastRequestSuccessful());
+    
+    return connected;
 }
 
 /**
